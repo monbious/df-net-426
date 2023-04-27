@@ -200,10 +200,10 @@ class DFNet(nn.Module):
         for i, pred_text in enumerate(predicted_texts):
             # print('pred_text: ', pred_text)
             pred_resp = pred_text.split('[SEP]')[-1].strip()
-            if not self.gptModel.training:
-                print('='*50)
-                print('  pred_resp: ', pred_resp)
-                print('target_resp: ', data['answer_texts'][i])
+            # if not self.gptModel.training:
+            #     print('='*50)
+            #     print('  pred_resp: ', pred_resp)
+            #     print('target_resp: ', data['answer_texts'][i])
             # bleu = self.get_sentence_bleu(pred_resp, data['answer_texts'][i])
             sen_arr = []
             for token in self.tokenizer.tokenize(pred_resp):
