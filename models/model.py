@@ -57,11 +57,6 @@ class DFNet(nn.Module):
             self.extKnow = ExternalKnowledge(lang.n_words, hidden_size, n_layers, dropout)
             self.decoder = LocalMemoryDecoder(self.encoder.embedding, lang, hidden_size, self.decoder_hop,
                                               dropout, domains=domains)
-            if USE_CUDA:
-                self.encoder = nn.DataParallel(self.encoder, device_ids=device_ids)
-                self.gptModel = nn.DataParallel(self.gptModel, device_ids=device_ids)
-                self.extKnow = nn.DataParallel(self.extKnow, device_ids=device_ids)
-                self.decoder = nn.DataParallel(self.decoder, device_ids=device_ids)
 
         # Initialize optimizers and criterion
         self.encoder_optimizer = optim.Adam(self.encoder.parameters(), lr=lr)

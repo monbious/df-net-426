@@ -6,7 +6,6 @@ PAD_token = 1
 SOS_token = 3
 EOS_token = 2
 UNK_token = 0
-device_ids = [0, 1]
 parser = argparse.ArgumentParser(description='DF-Net')
 
 parser.add_argument('-ds', '--dataset', help='dataset, kvr or woz', required=False, default='kvr')
