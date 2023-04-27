@@ -40,6 +40,7 @@ class Lang:
             self.index2word[self.n_words] = word
             self.n_words += 1
 
+
 class Dataset(data.Dataset):
     """Custom data.Dataset compatible with data.DataLoader."""
 
@@ -148,14 +149,21 @@ class Dataset(data.Dataset):
         sketch_response, _ = merge(item_info['sketch_response'], False)
         kb_arr, kb_arr_lengths = merge(item_info['kb_arr'], True)
 
+
         # sketch_response_tf, _ = merge(item_info['sketch_response_tf'], False)
         # conv_arr_plain, conv_arr_plain_lengths = merge(item_info['conv_arr_plain'], False)
-        conv_input_ids = [self.tokenizer.encode(conv + ' ' + res + self.tokenizer.eos_token, add_special_tokens=True)
-                          for conv, res in zip(item_info['conv_arr_plain'], item_info['sketch_response_gpt'])]
+        conv_input_ids = [self.tokenizer.encode(conv + ' ' + resp, add_special_tokens=True)
+                          for conv, resp in zip(item_info['conv_arr_plain'], item_info['sketch_response_gpt'])]
+        conv_dec_input_ids = [[self.tokenizer.bos_token_id] + self.tokenizer.encode(resp, add_special_tokens=True)
+                              for resp in item_info['sketch_response_gpt']]
         # print(conv_input_ids)
         max_len = max(len(ids) for ids in conv_input_ids)
         input_ids_padded = [ids + [self.tokenizer.pad_token_id] * (max_len - len(ids)) for ids in conv_input_ids]
         attention_masks = [[1] * len(ids) + [0] * (max_len - len(ids)) for ids in conv_input_ids]
+
+        max_len = max(len(ids) for ids in conv_dec_input_ids)
+        dec_input_ids_padded = [ids + [self.tokenizer.pad_token_id] * (max_len - len(ids)) for ids in conv_dec_input_ids]
+        dec_attention_masks = [[1] * len(ids) + [0] * (max_len - len(ids)) for ids in conv_dec_input_ids]
 
         g_input_ids = [self.tokenizer.encode(item, add_special_tokens=True) for item in item_info['conv_arr_plain']]
         max_len = max(len(ids) for ids in g_input_ids)
@@ -190,6 +198,9 @@ class Dataset(data.Dataset):
 
         data_info['input_ids_padded'] = torch.LongTensor(input_ids_padded)
         data_info['attention_masks'] = torch.LongTensor(attention_masks)
+        data_info['dec_input_ids_padded'] = torch.LongTensor(dec_input_ids_padded)
+        data_info['dec_attention_masks'] = torch.LongTensor(dec_attention_masks)
+
         data_info['g_input_ids_padded'] = torch.LongTensor(g_input_ids_padded)
         data_info['g_attention_masks'] = torch.LongTensor(g_attention_masks)
         data_info['query_texts'] = query_texts
@@ -222,10 +233,10 @@ def get_seq(pairs, lang, batch_size, type, tokenizer):
             lang.index_words(pair['response'], trg=True)
             lang.index_words(pair['sketch_response'], trg=True)
 
-            tokenizer.add_tokens([item for item in pair['conv_arr_plain'].split(' ')])
-            tokenizer.add_tokens([item for item in pair['response'].split(' ')])
-            tokenizer.add_tokens([item for item in pair['sketch_response'].split(' ')])
-            tokenizer.add_tokens([item for group in pair['kb_source'] for item in group])
+            # tokenizer.add_tokens([item for item in pair['conv_arr_plain'].split(' ')])
+            # tokenizer.add_tokens([item for item in pair['response'].split(' ')])
+            # tokenizer.add_tokens([item for item in pair['sketch_response'].split(' ')])
+            # tokenizer.add_tokens([item for group in pair['kb_source'] for item in group])
 
     dataset = Dataset(data_info, lang.word2index, lang.word2index, lang, tokenizer)
     data_loader = torch.utils.data.DataLoader(dataset=dataset,

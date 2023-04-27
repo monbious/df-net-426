@@ -33,6 +33,10 @@ class DFNet(nn.Module):
         self.gpt2_config.n_embd = 128
         self.gpt2_config.n_layer = 4
         self.gpt2_config.n_head = 8
+        # self.gpt2_config.pad_token_id = tokenizer.pad_token_id
+        # self.gpt2_config.decoder_start_token_id = tokenizer.bos_token_id
+        # self.gpt2_config.eos_token_id = tokenizer.eos_token_id
+        # self.gpt2_config.is_encoder_decoder = True
 
         if path:
             if USE_CUDA:
@@ -190,10 +194,17 @@ class DFNet(nn.Module):
 
     def process_extract_res(self, data, max_target_length):
         g_inputs, g_mask = self._cuda(data['g_input_ids_padded']), self._cuda(data['g_attention_masks'])
-        output_ids = self.gptModel.generate(input_ids=g_inputs, pad_token_id=self.tokenizer.eos_token_id,
+        out = self.gptModel.generate(input_ids=g_inputs, pad_token_id=self.tokenizer.eos_token_id,
                                             attention_mask=g_mask,
                                             max_new_tokens=max_target_length, do_sample=True, num_beams=5,
-                                            temperature=1.0)
+                                            temperature=1.0, output_hidden_states=True, return_dict_in_generate=True)
+        # out_hiddens = out.hidden_states
+        # for hiddens in out_hiddens:
+        #     print('-'*30)
+        #     for hidden in hiddens:
+        #         print('hidden.shape: ', hidden.shape)
+        output_ids = out.sequences
+        # print('output_ids.shape: ', output_ids.shape)
         predicted_texts = [self.tokenizer.decode(output_id, skip_special_tokens=True) for output_id in
                            output_ids]
         bat_token_arr = []
@@ -240,9 +251,13 @@ class DFNet(nn.Module):
 
         dh_outputs, dh_hidden, label_e, label_mix_e = self.encoder(conv_story, data['conv_arr_lengths'])
 
+
+
         if self.gptModel.training:
-            conv_inputs, mask = self._cuda(data['input_ids_padded']), self._cuda(data['attention_masks'])
-            gpt_loss = self.gptModel(conv_inputs, attention_mask=mask, labels=conv_inputs)[0]
+            conv_inputs, conv_mask = self._cuda(data['input_ids_padded']), self._cuda(data['attention_masks'])
+            dec_conv_inputs, dec_conv_mask = self._cuda(data['dec_input_ids_padded']), self._cuda(data['dec_attention_masks'])
+            gpt_loss = self.gptModel(input_ids=conv_inputs, attention_mask=conv_mask, labels=conv_inputs)[0]
+            # print('gpt_out: ', gpt_loss)
 
             self.tokenizer.padding_side = 'left'
             tmp_resp = self.process_extract_res(data, max_target_length)
@@ -250,6 +265,8 @@ class DFNet(nn.Module):
         else:
             gpt_loss = None
             tmp_resp = self.process_extract_res(data, max_target_length)
+
+
 
         global_pointer, kb_readout = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
                                                               dh_hidden, dh_outputs, data['domain'], tmp_resp)
