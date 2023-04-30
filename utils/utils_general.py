@@ -40,11 +40,10 @@ class Lang:
             self.index2word[self.n_words] = word
             self.n_words += 1
 
-
 class Dataset(data.Dataset):
     """Custom data.Dataset compatible with data.DataLoader."""
 
-    def __init__(self, data_info, src_word2id, trg_word2id, lang, tokenizer):
+    def __init__(self, data_info, src_word2id, trg_word2id, lang):
         """Reads source and target sequences from txt files."""
         self.data_info = {}
         for k in data_info.keys():
@@ -54,7 +53,6 @@ class Dataset(data.Dataset):
         self.src_word2id = src_word2id
         self.trg_word2id = trg_word2id
         self.lang = lang
-        self.tokenizer = tokenizer
 
     def __getitem__(self, index):
         """Returns one data pair (source and target)."""
@@ -70,11 +68,6 @@ class Dataset(data.Dataset):
         kb_arr = self.preprocess(kb_arr, self.src_word2id, trg=False)
         sketch_response = self.data_info['sketch_response'][index]
         sketch_response = self.preprocess(sketch_response, self.trg_word2id)
-
-        sketch_response_gpt = self.data_info['sketch_response_gpt'][index]
-        # sketch_response_gpt = self.preprocess(sketch_response_gpt, self.trg_word2id)
-        conv_arr_plain = self.data_info['conv_arr_plain'][index]
-        # conv_arr_plain = self.preprocess(conv_arr_plain, self.src_word2id)[:-1]
 
         # processed information
         data_info = {}
@@ -140,7 +133,7 @@ class Dataset(data.Dataset):
         for key in data[0].keys():
             item_info[key] = [d[key] for d in data]
 
-        # merge sequences 
+        # merge sequences
         context_arr, context_arr_lengths = merge(item_info['context_arr'], True)
         response, response_lengths = merge(item_info['response'], False)
         selector_index, _ = merge_index(item_info['selector_index'])
@@ -148,30 +141,6 @@ class Dataset(data.Dataset):
         conv_arr, conv_arr_lengths = merge(item_info['conv_arr'], True)
         sketch_response, _ = merge(item_info['sketch_response'], False)
         kb_arr, kb_arr_lengths = merge(item_info['kb_arr'], True)
-
-
-        # sketch_response_tf, _ = merge(item_info['sketch_response_tf'], False)
-        # conv_arr_plain, conv_arr_plain_lengths = merge(item_info['conv_arr_plain'], False)
-        conv_input_ids = [self.tokenizer.encode(conv + ' ' + resp, add_special_tokens=True)
-                          for conv, resp in zip(item_info['conv_arr_plain'], item_info['sketch_response_gpt'])]
-        conv_dec_input_ids = [[self.tokenizer.bos_token_id] + self.tokenizer.encode(resp, add_special_tokens=True)
-                              for resp in item_info['sketch_response_gpt']]
-        # print(conv_input_ids)
-        max_len = max(len(ids) for ids in conv_input_ids)
-        input_ids_padded = [ids + [self.tokenizer.pad_token_id] * (max_len - len(ids)) for ids in conv_input_ids]
-        attention_masks = [[1] * len(ids) + [0] * (max_len - len(ids)) for ids in conv_input_ids]
-
-        max_len = max(len(ids) for ids in conv_dec_input_ids)
-        dec_input_ids_padded = [ids + [self.tokenizer.pad_token_id] * (max_len - len(ids)) for ids in conv_dec_input_ids]
-        dec_attention_masks = [[1] * len(ids) + [0] * (max_len - len(ids)) for ids in conv_dec_input_ids]
-
-        g_input_ids = [self.tokenizer.encode(item, add_special_tokens=True) for item in item_info['conv_arr_plain']]
-        max_len = max(len(ids) for ids in g_input_ids)
-        g_input_ids_padded = [[self.tokenizer.pad_token_id] * (max_len - len(ids)) + ids for ids in g_input_ids]
-        g_attention_masks = [[0] * (max_len - len(ids)) + [1] * len(ids) for ids in g_input_ids]
-        query_texts = [item for item in item_info['conv_arr_plain']]
-        answer_texts = [item for item in item_info['sketch_response_gpt']]
-
 
         max_seq_len = conv_arr.size(1)
         label_arr = _cuda(torch.Tensor([domains[label] for label in item_info['domain']]).long().unsqueeze(-1))
@@ -182,9 +151,6 @@ class Dataset(data.Dataset):
         ptr_index = _cuda(ptr_index.contiguous())
         conv_arr = _cuda(conv_arr.transpose(0, 1).contiguous())
         sketch_response = _cuda(sketch_response.contiguous())
-
-        # sketch_response_tf = _cuda(sketch_response_tf.contiguous())
-        # conv_arr_plain = _cuda(conv_arr_plain.contiguous())
         if (len(list(kb_arr.size())) > 1): kb_arr = _cuda(kb_arr.transpose(0, 1).contiguous())
         item_info['label_arr'] = []
 
@@ -196,26 +162,15 @@ class Dataset(data.Dataset):
             except:
                 data_info[k] = item_info[k]
 
-        data_info['input_ids_padded'] = torch.LongTensor(input_ids_padded)
-        data_info['attention_masks'] = torch.LongTensor(attention_masks)
-        data_info['dec_input_ids_padded'] = torch.LongTensor(dec_input_ids_padded)
-        data_info['dec_attention_masks'] = torch.LongTensor(dec_attention_masks)
-
-        data_info['g_input_ids_padded'] = torch.LongTensor(g_input_ids_padded)
-        data_info['g_attention_masks'] = torch.LongTensor(g_attention_masks)
-        data_info['query_texts'] = query_texts
-        data_info['answer_texts'] = answer_texts
-
         # additional plain information
         data_info['context_arr_lengths'] = context_arr_lengths
         data_info['response_lengths'] = response_lengths
         data_info['conv_arr_lengths'] = conv_arr_lengths
-        # data_info['conv_arr_plain_lengths'] = conv_arr_plain_lengths
         data_info['kb_arr_lengths'] = kb_arr_lengths
         return data_info
 
 
-def get_seq(pairs, lang, batch_size, type, tokenizer):
+def get_seq(pairs, lang, batch_size, type):
     data_info = {}
     for k in pairs[0].keys():
         data_info[k] = []
@@ -233,12 +188,7 @@ def get_seq(pairs, lang, batch_size, type, tokenizer):
             lang.index_words(pair['response'], trg=True)
             lang.index_words(pair['sketch_response'], trg=True)
 
-            # tokenizer.add_tokens([item for item in pair['conv_arr_plain'].split(' ')])
-            # tokenizer.add_tokens([item for item in pair['response'].split(' ')])
-            # tokenizer.add_tokens([item for item in pair['sketch_response'].split(' ')])
-            # tokenizer.add_tokens([item for group in pair['kb_source'] for item in group])
-
-    dataset = Dataset(data_info, lang.word2index, lang.word2index, lang, tokenizer)
+    dataset = Dataset(data_info, lang.word2index, lang.word2index, lang)
     data_loader = torch.utils.data.DataLoader(dataset=dataset,
                                               batch_size=batch_size,
                                               shuffle=type,

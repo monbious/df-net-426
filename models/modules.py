@@ -124,28 +124,6 @@ class CNNClassifier(nn.Module):
         return self.layer(torch.cat(conv, 1))
 
 
-class CNNClassifierForContext(nn.Module):
-
-    def __init__(self, input_dim, output_channel, filter, output_dim, dropout):
-        super(CNNClassifierForContext, self).__init__()
-
-        self.cnn = nn.ModuleList([nn.Conv2d(1, output_channel, (f, input_dim)) for f in filter])
-
-        linear_dim = output_channel * len(filter)
-        self.layer = nn.Sequential(
-            nn.Dropout(dropout),
-            nn.Linear(linear_dim, output_dim, bias=False),
-            nn.LeakyReLU(0.1),
-            # nn.Sigmoid()
-        )
-
-    def forward(self, input):
-        input = input.contiguous().unsqueeze(1)
-        conv = [F.relu(cnn_(input)).squeeze(3) for cnn_ in self.cnn]
-        conv = [F.max_pool1d(i, i.size(2)).squeeze(2) for i in conv]
-        return self.layer(torch.cat(conv, 1))
-
-
 class SelfAttention(nn.Module):
     """
     scores each element of the sequence with a linear layer and uses the normalized scores to compute a context over the sequence.
@@ -192,66 +170,6 @@ class MLPSelfAttention(nn.Module):
         return context, scores_
 
 
-class PositionalEncoding(nn.Module):
-
-    def __init__(self, d_model, max_len=5000):
-        super(PositionalEncoding, self).__init__()
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
-        #pe.requires_grad = False
-        self.register_buffer('pe', pe)
-
-    def forward(self, x):
-        return x + self.pe[:, :x.size(1)]
-
-
-class TransformerModel(nn.Module):
-    def __init__(self, vocab_size, max_seq_len, hidden_size, num_layers, num_heads, dropout_prob, embedding):
-        super(TransformerModel, self).__init__()
-        self.d_model = hidden_size
-        self.embedding = embedding
-        self.pos_encoder = PositionalEncoding(hidden_size, max_seq_len)
-
-        self.transformer = nn.Transformer(hidden_size, num_heads, num_layers, num_layers, 1*hidden_size,
-                                          dropout_prob, batch_first=True)
-        self.encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(hidden_size, num_heads, 1*hidden_size, dropout_prob, batch_first=True),
-            num_layers)
-        self.decoder = nn.TransformerDecoder(
-            nn.TransformerDecoderLayer(hidden_size, num_heads, 1*hidden_size, dropout_prob, batch_first=True),
-            num_layers)
-
-        self.fc = nn.Linear(hidden_size, vocab_size)
-
-    def forward(self, src, tgt):
-        # src: (batch_size, seq_len)
-        # tgt: (batch_size, seq_len)
-        # print(src.shape, tgt.shape)
-        src_mask = _cuda(nn.Transformer.generate_square_subsequent_mask(src.size(1)))
-        tgt_mask = _cuda(nn.Transformer.generate_square_subsequent_mask(tgt.size(1)))
-
-        src_emb = self.embedding(src) * math.sqrt(self.d_model)
-        src_emb = self.pos_encoder(src_emb)
-        tgt_emb = self.embedding(tgt) * math.sqrt(self.d_model)
-        tgt_emb = self.pos_encoder(tgt_emb)
-
-        # encoder_out = self.encoder(src_emb, src_mask)
-        # decoder_out = self.decoder(tgt_emb, encoder_out, tgt_mask)
-        output = self.transformer(src_emb, tgt_emb, src_mask, tgt_mask)
-
-        output = self.fc(output)
-        # print(tgt_mask.shape)
-        return output
-
-    def train_temp(self, input, target):
-        output = self.forward(input, target)
-        return output
-
-
 class ContextEncoder(nn.Module):
     def __init__(self, input_size, hidden_size, dropout, domains, n_layers=args['layer_r']):
         super(ContextEncoder, self).__init__()
@@ -281,9 +199,6 @@ class ContextEncoder(nn.Module):
         self.global_classifier = nn.Sequential(
             GradientReversal(),
             CNNClassifier(2 * hidden_size, hidden_size, [2, 3], len(domains), dropout))
-        self.cnn_outputs = nn.Sequential(
-            GradientReversal(),
-            CNNClassifierForContext(1 * hidden_size, hidden_size, [3, 4], hidden_size, dropout))
 
     def get_state(self, bsz):
         """Get cell states and hidden states."""
@@ -309,9 +224,11 @@ class ContextEncoder(nn.Module):
 
         local_outputs, scores = self.mix_attention(torch.stack(local_outputs, dim=-1), mask)
         outputs_ = self.MLP_H(torch.cat((F.dropout(local_outputs, self.dropout, self.training),
-                                         F.dropout(global_outputs, self.dropout, self.training)), dim=-1))
+                                        F.dropout(global_outputs, self.dropout, self.training)), dim=-1))
 
         hidden_ = self.selfatten(outputs_, input_lengths)
+        # outputs_ = self.W(outputs)
+        # hidden_ = self.W(hidden)
         label = self.global_classifier(global_outputs)
         return outputs_, hidden_, label, scores
 
@@ -328,6 +245,12 @@ class ExternalKnowledge(nn.Module):
             C.weight.data.normal_(0, 0.1)
             self.add_module("C_{}".format(hop), C)
         self.C = AttrProxy(self, "C_")
+
+        # for hop in range(self.max_hops + 1):
+        #     C_ent = nn.Embedding(vocab, embedding_dim, padding_idx=PAD_token)
+        #     C_ent.weight.data.normal_(0, 0.1)
+        #     self.add_module("C_ent_{}".format(hop), C_ent)
+        # self.C_ent = AttrProxy(self, "C_ent_")
 
         self.softmax = nn.Softmax(dim=1)
         self.sigmoid = nn.Sigmoid()
@@ -350,15 +273,6 @@ class ExternalKnowledge(nn.Module):
             full_memory[bi, start:end, :] = full_memory[bi, start:end, :] + hiddens[bi, :conv_len[bi], :]
         return full_memory
 
-    def add_ex_embedding(self, full_memory, kb_len, conv_len, hiddens, kb_memory=False):
-        for bi in range(full_memory.size(0)):
-            if kb_memory:
-                start, end = kb_len[bi], kb_len[bi] + conv_len[bi]
-                full_memory[bi, start:end, :] = full_memory[bi, start:end, :] + hiddens[bi, :conv_len[bi], :]
-            else:
-                full_memory[bi, :conv_len[bi], :] = full_memory[bi, :conv_len[bi], :] + hiddens[bi, :conv_len[bi], :]
-        return full_memory
-
     def get_ck(self, hop, story, story_size):
         embed = self.C[hop](story.contiguous().view(story_size[0], -1))
         embed = embed.view(story_size + (embed.size(-1),))
@@ -372,7 +286,7 @@ class ExternalKnowledge(nn.Module):
         embed = torch.sum(embed, 2).squeeze(2)
         return embed
 
-    def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, sk_res):
+    def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, sk_res, res_len):
         # Forward multiple hop mechanism
         u = [hidden.squeeze(0)]
         story_size = story.size()
@@ -419,11 +333,6 @@ class ExternalKnowledge(nn.Module):
         self.m_story_ent = []
         for hop in range(self.max_hops):
             embed_A = self.get_ck(hop, story, story_size)
-
-            # story_cnn = self.cnn_outputs(embed_A).unsqueeze(1)
-            # story_cnn_expand = story_cnn.expand_as(embed_A)
-            # embed_A = embed_A + story_cnn_expand
-
             embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
             embed_A = self.dropout_layer(embed_A)
 
@@ -434,12 +343,8 @@ class ExternalKnowledge(nn.Module):
             prob_ = self.softmax(prob_logit)
 
             embed_C = self.get_ck(hop + 1, story, story_size)
-
-            # story_cnn_c = self.cnn_outputs_c(embed_C).unsqueeze(1)
-            # story_cnn_expand_c = story_cnn_c.expand_as(embed_C)
-            # embed_C = embed_C + story_cnn_expand_c
-
             embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
+
             prob = prob_.unsqueeze(2).expand_as(embed_C)
             o_k = torch.sum(embed_C * prob, 1)
             u_k = u_ent[-1] + o_k
@@ -506,9 +411,9 @@ class LocalMemoryDecoder(nn.Module):
         self.projector2 = nn.Linear(2 * hidden_dim, hidden_dim)
         self.projector3 = nn.Linear(2 * hidden_dim, hidden_dim)
         self.projector4 = nn.Sequential(
-            nn.Linear(3 * hidden_dim, 2 * hidden_dim),
-            nn.Tanh(),
-            nn.Linear(2 * hidden_dim, hidden_dim),
+            # nn.Linear(3 * hidden_dim, 2 * hidden_dim),
+            # nn.Tanh(),
+            nn.Linear(3 * hidden_dim, hidden_dim),
         )
         self.domain_emb = nn.Embedding(len(domains), self.embedding_dim)
 
@@ -523,24 +428,20 @@ class LocalMemoryDecoder(nn.Module):
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
-    def get_p_vocab_atten(self, hidden, tmp_response, kb_readout):
+    def get_p_vocab_atten(self, hidden, H, kb_readout):
         h = hidden.unsqueeze(1)
-        atten_weights = self.attn_table(torch.cat((tmp_response, h.expand_as(tmp_response)), dim=-1))
+        atten_weights = self.attn_table(torch.cat((H, h.expand_as(H)), dim=-1))
         atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
-        H_ = atten_weights.bmm(tmp_response)
+        H_ = atten_weights.bmm(H)
+        # hdd_context = F.tanh(self.projector2(torch.cat((H_, h), dim=-1)))
+        # context = F.tanh(self.projector3(torch.cat((hdd_context, kb_readout.unsqueeze(1)), dim=-1))).transpose(0, 1)
         context = torch.tanh(self.projector4(torch.cat((H_, h, kb_readout.unsqueeze(1)), dim=-1))).transpose(0, 1)
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
-    def get_emb(self, story, story_size):
-        embed = self.C(story.contiguous().view(story_size[0], -1))
-        embed = embed.view(story_size + (embed.size(-1),))
-        embed = torch.sum(embed, 2).squeeze(2)
-        return embed
-
     def forward(self, extKnow, story_size, story_lengths, copy_list, encode_hidden, target_batches, max_target_length,
                 batch_size, use_teacher_forcing, get_decoded_words, global_pointer, H=None, global_entity_type=None,
-                domains=None, kb_readout=None, tmp_resp=None):
+                domains=None, kb_readout=None):
         # Initialize variables for vocab and pointer
         all_decoder_outputs_vocab = _cuda(torch.zeros(max_target_length, batch_size, self.num_vocab))
         all_decoder_outputs_ptr = _cuda(torch.zeros(max_target_length, batch_size, story_size[1]))
@@ -548,8 +449,6 @@ class LocalMemoryDecoder(nn.Module):
             _cuda(torch.LongTensor([SOS_token] * batch_size)))
         memory_mask_for_step = _cuda(torch.ones(story_size[0], story_size[1]))
         decoded_fine, decoded_coarse = [], []
-
-        tmp_response = self.get_emb(tmp_resp, tmp_resp.unsqueeze(-1).size())
         hidden = self.relu(self.projector(encode_hidden)).unsqueeze(0)
         hidden_locals = []
         for i in range(len(self.domains)):
@@ -568,6 +467,7 @@ class LocalMemoryDecoder(nn.Module):
             gl_output, hidden = self.sketch_rnn_global(embed_q, hidden)
             hidden_locals_ = []
             for domain in self.domains.values():
+                # hidden_locals_.append(self.sketch_rnn_local[domain](embed_q, hidden_locals[domain])[0])
                 hidden_locals_.append(self.sketch_rnn_local[domain](embed_q, hidden_locals[domain])[1])
             hidden_locals = hidden_locals_
             hidden_local, score = self.mix_attention(torch.stack(hidden_locals, dim=-1).transpose(0, 1),
@@ -580,17 +480,14 @@ class LocalMemoryDecoder(nn.Module):
             # global_hiddens.append(hidden)
             local_hiddens.append(hidden_local)
 
-            p_vocab, context = self.get_p_vocab_atten(query_vector[0], tmp_response, kb_readout)
+            p_vocab, context = self.get_p_vocab_atten(query_vector[0], H, kb_readout)
             # p_vocab, context = self.get_p_vocab(query_vector[0], H)
-            # print(p_vocab.shape)
-            # print(p_vocab[0], type(p_vocab[0]))
 
             all_decoder_outputs_vocab[t] = p_vocab
             _, topvi = p_vocab.data.topk(1)
 
-            context_ = torch.tanh(self.projector3(torch.cat((context[0], kb_readout), dim=-1)))
             # query the external konwledge using the hidden state of sketch RNN
-            prob_soft, prob_logits = extKnow(context_, global_pointer)
+            prob_soft, prob_logits = extKnow(context[0], global_pointer)
             all_decoder_outputs_ptr[t] = prob_logits
 
             if use_teacher_forcing:

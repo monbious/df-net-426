@@ -26,7 +26,7 @@ else:
 # Configure models and load data
 if args['epoch'] > 0:
     avg_best, cnt, res = 0.0, 0, 0.0
-    train, dev, test, testOOV, lang, max_resp_len, max_seq_len, tokenizer = prepare_data_seq(batch_size=int(args['batch']))
+    train, dev, test, testOOV, lang, max_resp_len = prepare_data_seq(batch_size=int(args['batch']))
     model = globals()['DFNet'](
         int(args['hidden']),
         lang,
@@ -35,11 +35,7 @@ if args['epoch'] > 0:
         lr=float(args['learn']),
         n_layers=int(args['layer']),
         dropout=float(args['drop']),
-        domains=domains,
-        max_seq_len=max_seq_len,
-        tf_num_layers=int(args['num_layers']),
-        tf_num_heads=int(args['num_heads']),
-        tokenizer=tokenizer)
+        domains=domains)
 
     # Training
     for epoch in range(args['epoch']):
@@ -51,8 +47,7 @@ if args['epoch'] > 0:
         if (epoch + 1) % int(args['evalp']) == 0:
             res = model.evaluate(dev, avg_best, early_stop=early_stop)
             model.scheduler.step(res)
-            model.gpt_scheduler.step(res)
-            if res > avg_best:
+            if res >= avg_best:
                 avg_best = res
                 cnt = 0
             else:
@@ -63,7 +58,7 @@ if args['epoch'] > 0:
                 break
 
 # Testing
-train, dev, test, testOOV, lang, max_resp_len, max_seq_len, tokenizer = prepare_data_seq(batch_size=int(args['batch']))
+train, dev, test, testOOV, lang, max_resp_len = prepare_data_seq(batch_size=int(args['batch']))
 
 model = globals()['DFNet'](
     int(args['hidden']),
@@ -73,10 +68,6 @@ model = globals()['DFNet'](
     lr=0.0,
     n_layers=int(args['layer']),
     dropout=0.0,
-    domains=domains,
-    max_seq_len=max_seq_len,
-    tf_num_layers=int(args['num_layers']),
-    tf_num_heads=int(args['num_heads']),
-    tokenizer=tokenizer)
+    domains=domains)
 
 res_test = model.evaluate(test, 1e7, output=True)

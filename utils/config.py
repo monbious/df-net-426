@@ -6,6 +6,7 @@ PAD_token = 1
 SOS_token = 3
 EOS_token = 2
 UNK_token = 0
+
 parser = argparse.ArgumentParser(description='DF-Net')
 
 parser.add_argument('-ds', '--dataset', help='dataset, kvr or woz', required=False, default='kvr')
@@ -35,8 +36,6 @@ parser.add_argument('-es', '--earlyStop', help='Early Stop Criteria, BLEU or ENT
 parser.add_argument('-rec', '--record', help='use record function during inference', type=int, required=False,
                     default=1)
 parser.add_argument('-op', '--output', help='output file', required=False, default='output.log')
-parser.add_argument('-nl', '--num_layers', help='transformer num_layers', required=False, default=4)
-parser.add_argument('-nh', '--num_heads', help='transformer num_heads', required=False, default=8)
 
 args = vars(parser.parse_args())
 print(str(args))
