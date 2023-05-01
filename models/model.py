@@ -165,11 +165,6 @@ class DFNet(nn.Module):
         else:
             story, conv_story = data['context_arr'], data['conv_arr']
 
-        # print()
-        # print('conv_story.shape:', conv_story.shape)
-        # # print(conv_story[:, 0, :])
-        # print('story.shape:', story.shape)
-        # print(story[0, :, :])
         dh_outputs, dh_hidden, label_e, label_mix_e = self.encoder(conv_story, data['conv_arr_lengths'])
         global_pointer, kb_readout = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
                             dh_hidden, dh_outputs, data['domain'], data['sketch_response'], data['response_lengths'])

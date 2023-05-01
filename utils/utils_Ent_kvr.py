@@ -18,9 +18,6 @@ def read_langs(file_name, max_line=None):
     with open('data/KVR/kvret_entities.json') as f:
         global_entity = json.load(f)
         global_entity_keys = list(global_entity.keys()) + list(global_entity['poi'][0].keys())
-    for ent_type in global_entity_keys:
-        kb_arr.append(
-            ["@" + ent_type, "$ent_type", 'turn', 'ent_type'] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
 
     with open(file_name) as fin:
         cnt_lin, sample_counter = 1, 1
@@ -36,6 +33,7 @@ def read_langs(file_name, max_line=None):
                 #     continue
 
                 nid, line = line.split(' ', 1)
+
                 if '\t' in line:
                     u, r, gold_ent = line.split('\t')
                     gen_u = generate_memory(u, "$u", str(nid))
@@ -46,25 +44,19 @@ def read_langs(file_name, max_line=None):
                     gold_ent = ast.literal_eval(gold_ent)
 
                     # [word, speaker, 'turn' + str(time), 'word' + str(idx)] + ["PAD"] * (MEM_TOKEN_SIZE - 4)
-                    reference = []
                     for i, ent in enumerate(gold_ent):
                         if ent in u:
                             ref = list(set([t for tup in kb_source if (ent in tup)
                                             for t in tup if t not in global_entity_keys and t != ent]))
-                            ref2 = list(set([t for item in ref for tup in kb_source if item in tup
-                                             for t in tup if t not in global_entity_keys and t != ent and t != item]))
-                            reference.append(
-                                [ent, "$ent", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
+                            context_arr.append(
+                                [ent, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
+                            conv_arr.append(
+                                [ent, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
                             for refer in ref:
-                                reference.append(
-                                    [refer, "$kb", 'turn' + str(nid), 'ref' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
-                            for refer2 in ref2:
-                                reference.append(
-                                    [refer2, "$kb", 'turn' + str(nid), 'ref2' + str(i)] + ["PAD"] * (
-                                                MEM_TOKEN_SIZE - 4))
-                    kb_arr_turn = kb_arr + reference
-                    # ent_type + kb + refer + conv
-                    context_arr_turn = kb_arr_turn + context_arr
+                                context_arr.append(
+                                    [refer, "$u", 'turn' + str(nid), 'ref' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
+                                conv_arr.append(
+                                    [refer, "$u", 'turn' + str(nid), 'ref' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
 
                     ent_idx_cal, ent_idx_nav, ent_idx_wet = [], [], []
                     if task_type == "weather":
@@ -78,33 +70,33 @@ def read_langs(file_name, max_line=None):
                     # Get local pointer position for each word in system response
                     ptr_index = []
                     for key in r.split():
-                        index = [loc for loc, val in enumerate(context_arr_turn) if
-                                 (val[0] == key and key in ent_index)]
+                        index = [loc for loc, val in enumerate(context_arr) if (val[0] == key and key in ent_index)]
                         if (index):
                             index = max(index)
                         else:
-                            index = len(context_arr_turn)
+                            index = len(context_arr)
                         ptr_index.append(index)
 
-                    sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
                     # Get global pointer labels for words in system response, the 1 in the end is for the NULL token
-                    # word_arr[0] in ent_index or
-                    selector_index = [1 if (word_arr[0] in r.split() or word_arr[0] in sketch_response.split()) else 0
-                                      for word_arr in context_arr_turn] + [1]
+                    selector_index = [1 if (word_arr[0] in ent_index or word_arr[0] in r.split()) else 0
+                                      for word_arr in context_arr] + [1]
+                    # for k in kb_arr:
+                    #     print(k)
+                    sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
                     # print('===>', conv_arr[:][0:1])
                     data_detail = {
-                        'context_arr': list(context_arr_turn + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
+                        'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
                         'response': r,
                         'sketch_response': sketch_response,
                         'gold_sketch': gold_sketch,
-                        'ptr_index': ptr_index + [len(context_arr_turn)],
+                        'ptr_index': ptr_index + [len(context_arr)],
                         'selector_index': selector_index,
                         'ent_index': ent_index,
                         'ent_idx_cal': list(set(ent_idx_cal)),
                         'ent_idx_nav': list(set(ent_idx_nav)),
                         'ent_idx_wet': list(set(ent_idx_wet)),
                         'conv_arr': list(conv_arr),
-                        'kb_arr': list(kb_arr_turn),
+                        'kb_arr': list(kb_arr),
                         'id': int(sample_counter),
                         'ID': int(cnt_lin),
                         'domain': task_type}
@@ -118,20 +110,18 @@ def read_langs(file_name, max_line=None):
                         max_resp_len = len(r.split())
                     sample_counter += 1
                 else:
-                    r = line
+                    r = line.strip()
                     r_split = r.split(' ')
                     kb_source.append(r_split)
 
                     kb_info = generate_memory(r, "", str(nid))
-                    # context_arr = kb_info + context_arr
+                    context_arr = kb_info + context_arr
                     kb_arr += kb_info
+
             else:
                 cnt_lin += 1
                 context_arr, conv_arr, kb_arr = [], [], []
                 kb_source = []
-                for ent_type in global_entity_keys:
-                    kb_arr.append(
-                        ["@" + ent_type, "$ent_type", 'turn', 'ent_type'] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
                 if (max_line and cnt_lin >= max_line):
                     break
 
@@ -169,6 +159,8 @@ def generate_template(global_entity, sentence, sent_ent, kb_arr, domain):
                             if word in poi_list or word.replace('_', ' ') in poi_list:
                                 ent_type = key
                                 break
+                # print(word)
+                # print(ent_type)
                 sketch_response.append('@' + ent_type)
                 gold_sketch.append('@' + ent_type)
     sketch_response = " ".join(sketch_response)
