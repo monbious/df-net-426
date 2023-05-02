@@ -411,7 +411,7 @@ class LocalMemoryDecoder(nn.Module):
         self.projector2 = nn.Linear(2 * hidden_dim, hidden_dim)
         self.projector3 = nn.Linear(2 * hidden_dim, hidden_dim)
         self.projector4 = nn.Sequential(
-            nn.Linear(3 * hidden_dim, 2 * hidden_dim),
+            nn.Linear(2 * hidden_dim, 2 * hidden_dim),
             nn.Tanh(),
             nn.Linear(2 * hidden_dim, hidden_dim),
         )
@@ -434,7 +434,7 @@ class LocalMemoryDecoder(nn.Module):
         atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
         H_ = atten_weights.bmm(H)
 
-        context = torch.tanh(self.projector4(torch.cat((H_, h, kb_readout.unsqueeze(1)), dim=-1))).transpose(0, 1)
+        context = torch.tanh(self.projector4(torch.cat((H_, h), dim=-1))).transpose(0, 1)
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
@@ -485,14 +485,15 @@ class LocalMemoryDecoder(nn.Module):
             all_decoder_outputs_vocab[t] = p_vocab
             _, topvi = p_vocab.data.topk(1)
 
-            # query the external konwledge using the hidden state of sketch RNN
-            prob_soft, prob_logits = extKnow(context[0], global_pointer)
-            all_decoder_outputs_ptr[t] = prob_logits
-
             if use_teacher_forcing:
                 decoder_input = target_batches[:, t]
             else:
                 decoder_input = topvi.squeeze()
+
+            context = torch.tanh(self.projector3(torch.cat((context[0], kb_readout), dim=-1)))
+            # query the external konwledge using the hidden state of sketch RNN
+            prob_soft, prob_logits = extKnow(context, global_pointer)
+            all_decoder_outputs_ptr[t] = prob_logits
 
             if get_decoded_words:
 
