@@ -79,7 +79,7 @@ def read_langs(file_name, max_line=None):
                                       for word_arr in context_arr] + [1]
 
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
-                    # print('===>', conv_arr[:][0:1])
+
                     data_detail = {
                         'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
                         'response': r,
