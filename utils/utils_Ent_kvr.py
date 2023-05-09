@@ -29,9 +29,6 @@ def read_langs(file_name, max_line=None):
                     task_type = line
                     continue
 
-                # if file_name.__contains__('train') and task_type == 'weather' and random.random() < 0.99:
-                #     continue
-
                 nid, line = line.split(' ', 1)
 
                 if '\t' in line:
