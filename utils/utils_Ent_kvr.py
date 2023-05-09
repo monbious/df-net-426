@@ -77,8 +77,7 @@ def read_langs(file_name, max_line=None):
                     # Get global pointer labels for words in system response, the 1 in the end is for the NULL token
                     selector_index = [1 if (word_arr[0] in ent_index or word_arr[0] in r.split()) else 0
                                       for word_arr in context_arr] + [1]
-                    # for k in kb_arr:
-                    #     print(k)
+
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
                     # print('===>', conv_arr[:][0:1])
                     data_detail = {
