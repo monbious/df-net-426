@@ -51,9 +51,9 @@ def read_langs(file_name, max_line=None):
                                 [ent, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
                             for refer in ref:
                                 context_arr.append(
-                                    [refer, "$u", 'turn' + str(nid), 'ref' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
+                                    [refer, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
                                 conv_arr.append(
-                                    [refer, "$u", 'turn' + str(nid), 'ref' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
+                                    [refer, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
 
                     ent_idx_cal, ent_idx_nav, ent_idx_wet = [], [], []
                     if task_type == "weather":
@@ -75,7 +75,8 @@ def read_langs(file_name, max_line=None):
                         ptr_index.append(index)
 
                     # Get global pointer labels for words in system response, the 1 in the end is for the NULL token
-                    selector_index = [1 if (word_arr[0] in ent_index or word_arr[0] in r.split()) else 0
+                    #  or word_arr[0] in r.split()
+                    selector_index = [1 if (word_arr[0] in ent_index) else 0
                                       for word_arr in context_arr] + [1]
 
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)

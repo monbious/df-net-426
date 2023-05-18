@@ -168,7 +168,7 @@ class DFNet(nn.Module):
         dh_outputs, dh_hidden, label_e, label_mix_e = self.encoder(conv_story, data['conv_arr_lengths'])
         global_pointer, kb_readout = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
                             dh_hidden, dh_outputs, data['domain'], data['sketch_response'], data['response_lengths'])
-        encoded_hidden = torch.cat((dh_hidden, kb_readout), dim=1)
+        # encoded_hidden = torch.cat((dh_hidden, kb_readout), dim=1)
 
         # Get the words that can be copy from the memory
         batch_size = len(data['context_arr_lengths'])
@@ -176,14 +176,13 @@ class DFNet(nn.Module):
         for elm in data['context_arr_plain']:
             elm_temp = [word_arr[0] for word_arr in elm]
             self.copy_list.append(elm_temp)
-        # print('======>', data['context_arr_plain'])
 
         outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, label_d, label_mix_d = self.decoder.forward(
             self.extKnow,
             story.size(),
             data['context_arr_lengths'],
             self.copy_list,
-            encoded_hidden,
+            dh_hidden,
             data['sketch_response'],
             max_target_length,
             batch_size,
@@ -506,22 +505,23 @@ class DFNet(nn.Module):
         return F1
 
     def print_examples(self, batch_idx, data, pred_sent, pred_sent_coarse, gold_sent):
-        kb_len = len(data['context_arr_plain'][batch_idx]) - data['conv_arr_lengths'][batch_idx] - 1
-        print("{}: ID{} id{} ".format(data['domain'][batch_idx], data['ID'][batch_idx], data['id'][batch_idx]))
-        for i in range(kb_len):
-            kb_temp = [w for w in data['context_arr_plain'][batch_idx][i] if w != 'PAD']
-            kb_temp = kb_temp[::-1]
-            if 'poi' not in kb_temp:
-                print(kb_temp)
-        flag_uttr, uttr = '$u', []
-        for word_idx, word_arr in enumerate(data['context_arr_plain'][batch_idx][kb_len:]):
-            if word_arr[1] == flag_uttr:
-                uttr.append(word_arr[0])
-            else:
-                print(flag_uttr, ': ', " ".join(uttr))
-                flag_uttr = word_arr[1]
-                uttr = [word_arr[0]]
-        print('Sketch System Response : ', pred_sent_coarse)
-        print('Final System Response : ', pred_sent)
-        print('Gold System Response : ', gold_sent)
-        print('\n')
+        with open('gen_result.log', 'a', encoding='utf-8') as f:
+            kb_len = len(data['context_arr_plain'][batch_idx]) - data['conv_arr_lengths'][batch_idx] - 1
+            print("{}: ID{} id{} ".format(data['domain'][batch_idx], data['ID'][batch_idx], data['id'][batch_idx]), file=f)
+            for i in range(kb_len):
+                kb_temp = [w for w in data['context_arr_plain'][batch_idx][i] if w != 'PAD']
+                kb_temp = kb_temp[::-1]
+                if 'poi' not in kb_temp:
+                    print(kb_temp, file=f)
+            flag_uttr, uttr = '$u', []
+            for word_idx, word_arr in enumerate(data['context_arr_plain'][batch_idx][kb_len:]):
+                if word_arr[1] == flag_uttr:
+                    uttr.append(word_arr[0])
+                else:
+                    print(flag_uttr, ': ', " ".join(uttr), file=f)
+                    flag_uttr = word_arr[1]
+                    uttr = [word_arr[0]]
+            print('Sketch System Response : ', pred_sent_coarse, file=f)
+            print('Final System Response : ', pred_sent, file=f)
+            print('Gold System Response : ', gold_sent, file=f)
+            print('\n', file=f)

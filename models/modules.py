@@ -227,8 +227,6 @@ class ContextEncoder(nn.Module):
                                         F.dropout(global_outputs, self.dropout, self.training)), dim=-1))
 
         hidden_ = self.selfatten(outputs_, input_lengths)
-        # outputs_ = self.W(outputs)
-        # hidden_ = self.W(hidden)
         label = self.global_classifier(global_outputs)
         return outputs_, hidden_, label, scores
 
@@ -428,7 +426,7 @@ class LocalMemoryDecoder(nn.Module):
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
-    def get_p_vocab_atten(self, hidden, H, kb_readout):
+    def get_p_vocab_atten(self, hidden, H):
         h = hidden.unsqueeze(1)
         atten_weights = self.attn_table(torch.cat((H, h.expand_as(H)), dim=-1))
         atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
@@ -448,7 +446,8 @@ class LocalMemoryDecoder(nn.Module):
             _cuda(torch.LongTensor([SOS_token] * batch_size)))
         memory_mask_for_step = _cuda(torch.ones(story_size[0], story_size[1]))
         decoded_fine, decoded_coarse = [], []
-        hidden = self.relu(self.projector(encode_hidden)).unsqueeze(0)
+        # hidden = self.relu(self.projector(encode_hidden)).unsqueeze(0)
+        hidden = encode_hidden.unsqueeze(0)
         hidden_locals = []
         for i in range(len(self.domains)):
             hidden_locals.append(hidden.clone())
@@ -479,7 +478,7 @@ class LocalMemoryDecoder(nn.Module):
             # global_hiddens.append(hidden)
             local_hiddens.append(hidden_local)
 
-            p_vocab, context = self.get_p_vocab_atten(query_vector[0], H, kb_readout)
+            p_vocab, context = self.get_p_vocab_atten(query_vector[0], H)
             # p_vocab, context = self.get_p_vocab(query_vector[0], H)
 
             all_decoder_outputs_vocab[t] = p_vocab
