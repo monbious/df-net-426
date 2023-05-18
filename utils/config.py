@@ -6,6 +6,7 @@ PAD_token = 1
 SOS_token = 3
 EOS_token = 2
 UNK_token = 0
+SEP_token = 4
 
 parser = argparse.ArgumentParser(description='DF-Net')
 

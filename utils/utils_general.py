@@ -21,7 +21,7 @@ elif args['dataset'] == 'woz':
 class Lang:
     def __init__(self):
         self.word2index = {}
-        self.index2word = {PAD_token: "PAD", SOS_token: "SOS", EOS_token: "EOS", UNK_token: 'UNK'}
+        self.index2word = {PAD_token: "PAD", SOS_token: "SOS", EOS_token: "EOS", UNK_token: 'UNK', SEP_token: 'SEP'}
         self.n_words = len(self.index2word)  # Count default tokens
         self.word2index = dict([(v, k) for k, v in self.index2word.items()])
 
@@ -68,6 +68,9 @@ class Dataset(data.Dataset):
         kb_arr = self.preprocess(kb_arr, self.src_word2id, trg=False)
         sketch_response = self.data_info['sketch_response'][index]
         sketch_response = self.preprocess(sketch_response, self.trg_word2id)
+
+        conv_u = self.data_info['conv_u'][index]
+        conv_u = self.preprocess(conv_u, self.src_word2id)[:-1]
 
         # processed information
         data_info = {}
@@ -142,11 +145,23 @@ class Dataset(data.Dataset):
         sketch_response, _ = merge(item_info['sketch_response'], False)
         kb_arr, kb_arr_lengths = merge(item_info['kb_arr'], True)
 
+        conv_u, _ = merge(item_info['conv_u'], False)
+        conv_r = response.clone()
+        if conv_u.size(1) > conv_r.size(1):
+            length = conv_u.size(1)
+            conv_r = torch.cat((conv_r, torch.ones(conv_r.size(0), length-conv_r.size(1)).long()), dim=-1)
+        else:
+            length = conv_r.size(1)
+            conv_u = torch.cat((conv_u, torch.ones(conv_u.size(0), length - conv_u.size(1)).long()), dim=-1)
+
+
         max_seq_len = conv_arr.size(1)
         label_arr = _cuda(torch.Tensor([domains[label] for label in item_info['domain']]).long().unsqueeze(-1))
         # convert to contiguous and cuda
         context_arr = _cuda(context_arr.contiguous())
         response = _cuda(response.contiguous())
+        conv_u = _cuda(conv_u.contiguous())
+        conv_r = _cuda(conv_r.contiguous())
         selector_index = _cuda(selector_index.contiguous())
         ptr_index = _cuda(ptr_index.contiguous())
         conv_arr = _cuda(conv_arr.transpose(0, 1).contiguous())
@@ -161,6 +176,8 @@ class Dataset(data.Dataset):
                 data_info[k] = locals()[k]
             except:
                 data_info[k] = item_info[k]
+
+        data_info['conv_r'] = conv_r
 
         # additional plain information
         data_info['context_arr_lengths'] = context_arr_lengths

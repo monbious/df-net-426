@@ -103,7 +103,8 @@ class DFNet(nn.Module):
         # Encode and Decode
         use_teacher_forcing = random.random() < args['teacher_forcing_ratio']
         max_target_length = max(data['response_lengths'])
-        all_decoder_outputs_vocab, all_decoder_outputs_ptr, _, _, global_pointer, label_e, label_d, label_mix_e, label_mix_d = self.encode_and_decode(
+        all_decoder_outputs_vocab, all_decoder_outputs_ptr, _, _, global_pointer, \
+        label_e, label_d, label_mix_e, label_mix_d, outputs_tf = self.encode_and_decode(
             data, max_target_length, use_teacher_forcing, False)
 
         # Loss calculation and backpropagation
@@ -119,7 +120,12 @@ class DFNet(nn.Module):
             all_decoder_outputs_ptr.transpose(0, 1).contiguous(),
             data['ptr_index'].contiguous(),
             data['response_lengths'])
-        loss = loss_g + loss_v + loss_l
+        loss_t = masked_cross_entropy(
+            outputs_tf.contiguous(),
+            data['conv_r'].contiguous(),
+            data['response_lengths']
+        )
+        loss = loss_g + loss_v + loss_l + loss_t
 
         golden_labels = torch.zeros_like(label_e).scatter_(1, data['label_arr'], 1)
         loss += self.criterion_label(label_e, golden_labels)
@@ -170,6 +176,8 @@ class DFNet(nn.Module):
                             dh_hidden, dh_outputs, data['domain'], data['sketch_response'], data['response_lengths'])
         # encoded_hidden = torch.cat((dh_hidden, kb_readout), dim=1)
 
+        outputs_tf, outputs_hidden = self.decoder.tfModel(data['conv_u'])
+
         # Get the words that can be copy from the memory
         batch_size = len(data['context_arr_lengths'])
         self.copy_list = []
@@ -189,12 +197,13 @@ class DFNet(nn.Module):
             use_teacher_forcing,
             get_decoded_words,
             global_pointer,
-            H=dh_outputs,
+            H=outputs_hidden,
             global_entity_type=global_entity_type,
             domains=data['label_arr'],
             kb_readout=kb_readout)
 
-        return outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, global_pointer, label_e, label_d, label_mix_e, label_mix_d
+        return outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, global_pointer, \
+               label_e, label_d, label_mix_e, label_mix_d, outputs_tf
 
     def evaluate(self, dev, matric_best, output=False, early_stop=None):
         print("STARTING EVALUATION")
@@ -254,7 +263,7 @@ class DFNet(nn.Module):
         for j, data_dev in pbar:
             ids.extend(data_dev['id'])
             # Encode and Decode
-            _, _, decoded_fine, decoded_coarse, global_pointer, _, _, _, _ = self.encode_and_decode(data_dev,
+            _, _, decoded_fine, decoded_coarse, global_pointer, _, _, _, _, _ = self.encode_and_decode(data_dev,
                                                                                                     self.max_resp_len,
                                                                                                     False,
                                                                                                     True,

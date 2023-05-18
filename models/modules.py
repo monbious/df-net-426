@@ -170,6 +170,75 @@ class MLPSelfAttention(nn.Module):
         return context, scores_
 
 
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:, :x.size(1)]
+        return self.dropout(x)
+
+
+class TransformerModel(nn.Module):
+    def __init__(self, n_token, hidden_size, num_layers, num_heads, dropout_prob, embedding):
+        super(TransformerModel, self).__init__()
+
+        self.d_model = hidden_size
+        self.pos_encoder = PositionalEncoding(hidden_size, dropout_prob)
+        self.transformer_encoder = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(hidden_size, num_heads, hidden_size, dropout_prob, batch_first=True),
+            num_layers)
+        self.encoder = embedding
+        self.src_mask = None
+        self.pad_mask = None
+
+        self.decoder = nn.Linear(hidden_size, n_token)
+        self.init_weights()
+
+        self.trans = nn.Sequential(
+            nn.Linear(2*hidden_size, hidden_size),
+        )
+        self.relu = nn.LeakyReLU(0.1)
+
+
+    def _generate_square_subsequent_mask(self, sz):
+        mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
+        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+        return mask
+
+    def init_weights(self):
+        initrange = 0.1
+        # nn.init.uniform_(self.encoder.weight, -initrange, initrange)
+        nn.init.zeros_(self.decoder.bias)
+        nn.init.uniform_(self.decoder.weight, -initrange, initrange)
+
+    def forward(self, src, has_mask=True):
+        if has_mask:
+            if self.src_mask is None or self.src_mask.size(1) != src.size(1):
+                mask = self._generate_square_subsequent_mask(src.size(1))
+                self.src_mask = _cuda(mask)
+            self.pad_mask = _cuda((src == PAD_token))
+        else:
+            self.src_mask = None
+            self.pad_mask = None
+
+        src = self.encoder(src) * math.sqrt(self.d_model)
+        src = self.pos_encoder(src)
+        output_h = self.transformer_encoder(src, self.src_mask, self.pad_mask)
+        outputs = self.decoder(output_h)
+        return outputs, output_h
+
+
 class ContextEncoder(nn.Module):
     def __init__(self, input_size, hidden_size, dropout, domains, n_layers=args['layer_r']):
         super(ContextEncoder, self).__init__()
@@ -417,6 +486,7 @@ class LocalMemoryDecoder(nn.Module):
 
         self.global_classifier = nn.Sequential(GradientReversal(),
                                                CNNClassifier(hidden_dim, hidden_dim, [2, 3], len(domains), dropout))
+        self.tfModel = TransformerModel(self.num_vocab, hidden_dim, 6, 8, dropout, shared_emb)
 
     def get_p_vocab(self, hidden, H):
         cond = self.attn_table(torch.cat((H, hidden.unsqueeze(1).expand_as(H)), dim=-1))

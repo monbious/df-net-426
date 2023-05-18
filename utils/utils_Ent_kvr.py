@@ -14,6 +14,8 @@ def read_langs(file_name, max_line=None):
     data, context_arr, conv_arr, kb_arr = [], [], [], []
     max_resp_len = 0
     kb_source = []
+    kb_plains = []
+    counter_set1, counter_set2 = set(), set()
 
     with open('data/KVR/kvret_entities.json') as f:
         global_entity = json.load(f)
@@ -81,10 +83,14 @@ def read_langs(file_name, max_line=None):
 
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
 
+                    kb_txt = ' '.join(kb_plains)
+                    conv_u = kb_txt + ' SEP ' + ' '.join([w[0] for w in conv_arr])
+
                     data_detail = {
                         'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
                         'response': r,
                         'sketch_response': sketch_response,
+                        'conv_u': conv_u,
                         'gold_sketch': gold_sketch,
                         'ptr_index': ptr_index + [len(context_arr)],
                         'selector_index': selector_index,
@@ -111,6 +117,21 @@ def read_langs(file_name, max_line=None):
                     r_split = r.split(' ')
                     kb_source.append(r_split)
 
+                    if len(r_split) < 5:
+                        if r_split[0] not in counter_set1:
+                            counter_set2.clear()
+                            if len(kb_plains) > 0:
+                                kb_plains.append("SEP")
+                            kb_plains += r_split
+                            counter_set1.add(r_split[0])
+                            counter_set2.add(r_split[1])
+                        else:
+                            if r_split[1] not in counter_set2:
+                                kb_plains += r_split[1:]
+                                counter_set2.add(r_split[1])
+                            else:
+                                kb_plains += r_split[2:]
+
                     kb_info = generate_memory(r, "", str(nid))
                     context_arr = kb_info + context_arr
                     kb_arr += kb_info
@@ -119,6 +140,9 @@ def read_langs(file_name, max_line=None):
                 cnt_lin += 1
                 context_arr, conv_arr, kb_arr = [], [], []
                 kb_source = []
+                kb_plains = []
+                counter_set1.clear()
+                counter_set2.clear()
                 if (max_line and cnt_lin >= max_line):
                     break
 
