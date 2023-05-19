@@ -314,7 +314,7 @@ class ContextEncoder(nn.Module):
         outputs_kb_ = self.MLP_kb(outputs_kb)
         hidden_kb_ = self.W_hid(hidden_kb)
 
-        return outputs_, hidden_kb_[0], label, scores, outputs_kb_
+        return outputs_, hidden_, label, scores, outputs_kb_, hidden_kb_[0]
 
 
 class ExternalKnowledge(nn.Module):
