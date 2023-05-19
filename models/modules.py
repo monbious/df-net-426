@@ -486,7 +486,7 @@ class LocalMemoryDecoder(nn.Module):
 
         self.global_classifier = nn.Sequential(GradientReversal(),
                                                CNNClassifier(hidden_dim, hidden_dim, [2, 3], len(domains), dropout))
-        self.tfModel = TransformerModel(self.num_vocab, hidden_dim, 6, 8, dropout, shared_emb)
+        self.tfModel = TransformerModel(self.num_vocab, hidden_dim, 8, 16, dropout, shared_emb)
 
     def get_p_vocab(self, hidden, H):
         cond = self.attn_table(torch.cat((H, hidden.unsqueeze(1).expand_as(H)), dim=-1))
