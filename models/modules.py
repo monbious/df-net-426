@@ -528,7 +528,7 @@ class LocalMemoryDecoder(nn.Module):
         scores = []
 
         H = H.contiguous()[:, :max_target_length, :]
-        print(' ', H.size(1), max_target_length)
+        # print(' ', H.size(1), max_target_length)
         # Start to generate word-by-word
         for t in range(max_target_length):
             if t != 0:
