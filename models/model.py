@@ -197,7 +197,7 @@ class DFNet(nn.Module):
             use_teacher_forcing,
             get_decoded_words,
             global_pointer,
-            H=dh_outputs,
+            H=outputs_hidden,
             global_entity_type=global_entity_type,
             domains=data['label_arr'],
             kb_readout=kb_readout)
