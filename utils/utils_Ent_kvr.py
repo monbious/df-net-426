@@ -84,7 +84,7 @@ def read_langs(file_name, max_line=None):
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
 
                     kb_txt = ' '.join(kb_plains)
-                    conv_u = kb_txt + ' SEP ' + ' '.join([w[0] for w in conv_arr])
+                    conv_u = ' '.join([w[0] for w in conv_arr])
 
                     data_detail = {
                         'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
