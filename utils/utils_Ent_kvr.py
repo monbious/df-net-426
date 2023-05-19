@@ -85,7 +85,7 @@ def read_langs(file_name, max_line=None):
 
                     kb_txt = ' '.join(kb_plains)
                     conv_u = ' '.join([w[0] for w in conv_arr])
-
+                    kb_arr = [['$$$$'] * MEM_TOKEN_SIZE] if len(kb_arr) == 0 else kb_arr
                     data_detail = {
                         'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
                         'response': r,

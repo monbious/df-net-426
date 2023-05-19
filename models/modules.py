@@ -53,9 +53,9 @@ class RNN_Residual(nn.Module):
         self.hidden_dim = hidden_dim
         self.batch_first = batch_first
 
-    def run_rnn(self, rnn, embedded, input_lengths, batch_first=True):
-        embedded = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths, batch_first=batch_first)
-        outputs, hidden = rnn(embedded)
+    def run_rnn(self, rnn, embedded, input_lengths, batch_first=True, hx=None):
+        embedded = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths, batch_first=batch_first, enforce_sorted=False)
+        outputs, hidden = rnn(embedded, hx)
         outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs, batch_first=batch_first)
         return outputs, hidden
 
@@ -65,15 +65,15 @@ class RNN_Residual(nn.Module):
             output[i, :l, :] = torch.flip(input[i, :l, :], (0,))
         return output
 
-    def forward(self, input, input_lengths):
+    def forward(self, input, input_lengths, hx=None):
         input_forward = input
         input_backward = self.flipByLength(input, input_lengths)
 
         for i in range(self.n_layers):
             output_forward, hidden_forward = self.run_rnn(self.__getattr__('forward_rnn_{}'.format(i)), input_forward,
-                                                          input_lengths, self.batch_first)
+                                                          input_lengths, self.batch_first, hx)
             output_backward, hidden_backward = self.run_rnn(self.__getattr__('backward_rnn_{}'.format(i)),
-                                                            input_backward, input_lengths, self.batch_first)
+                                                            input_backward, input_lengths, self.batch_first, hx)
             if i == 0:
                 input_forward = F.dropout(output_forward, self.dropout, self.training)
                 input_backward = F.dropout(output_backward, self.dropout, self.training)
@@ -253,6 +253,7 @@ class ContextEncoder(nn.Module):
         self.embedding = nn.Embedding(input_size, args['embeddings_dim'], padding_idx=PAD_token)
         self.odim = args['embeddings_dim']
         self.global_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
+        self.kb_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
         self.selfatten = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
         for domain in domains.keys():
             setattr(self, '{}_gru'.format(domain),
@@ -261,6 +262,11 @@ class ContextEncoder(nn.Module):
             nn.Linear(4 * self.hidden_size, 2 * self.hidden_size),
             nn.LeakyReLU(0.1),
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
+        )
+        self.MLP_kb = nn.Sequential(
+            nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
+            # nn.LeakyReLU(0.1),
+            # nn.Linear(1 * self.hidden_size, 1 * self.hidden_size),
         )
 
         self.W = nn.Linear(2 * hidden_size, hidden_size)
@@ -273,12 +279,16 @@ class ContextEncoder(nn.Module):
         """Get cell states and hidden states."""
         return _cuda(torch.zeros(2, bsz, self.hidden_size))
 
-    def forward(self, input_seqs, input_lengths):
+    def get_embedding(self, input_seqs):
         embedded = self.embedding(input_seqs.contiguous().view(input_seqs.size(0), -1).long())
         embedded = embedded.view(input_seqs.size() + (embedded.size(-1),))
         embedded = torch.sum(embedded, 2).squeeze(2)
         embedded = self.dropout_layer(embedded.transpose(0, 1))
+        return embedded
 
+    def forward(self, input_seqs, input_lengths, data):
+
+        embedded = self.get_embedding(input_seqs)
         global_outputs, global_hidden = self.global_gru(embedded, input_lengths)
         local_outputs = []
 
@@ -297,7 +307,14 @@ class ContextEncoder(nn.Module):
 
         hidden_ = self.selfatten(outputs_, input_lengths)
         label = self.global_classifier(global_outputs)
-        return outputs_, hidden_, label, scores
+
+        embed_kb = self.get_embedding(data['kb_arr'])
+        outputs_kb, hidden_kb = self.kb_gru(embed_kb, data['kb_arr_lengths'], hidden_.unsqueeze(0))
+        # print(hidden_kb.shape)
+        outputs_kb_ = self.MLP_kb(outputs_kb)
+        hidden_kb_ = self.W_hid(hidden_kb)
+
+        return outputs_, hidden_kb_[0], label, scores, outputs_kb_
 
 
 class ExternalKnowledge(nn.Module):
@@ -334,10 +351,11 @@ class ExternalKnowledge(nn.Module):
             nn.Linear(1 * self.embedding_dim, 1 * self.embedding_dim),
         )
 
-    def add_lm_embedding(self, full_memory, kb_len, conv_len, hiddens):
+    def add_lm_embedding(self, full_memory, kb_len, conv_len, hiddens, hiddens_kb):
         for bi in range(full_memory.size(0)):
             start, end = kb_len[bi], kb_len[bi] + conv_len[bi]
             full_memory[bi, start:end, :] = full_memory[bi, start:end, :] + hiddens[bi, :conv_len[bi], :]
+            full_memory[bi, :start, :] = full_memory[bi, :start, :] + hiddens_kb[bi, :start, :]
         return full_memory
 
     def get_ck(self, hop, story, story_size):
@@ -353,12 +371,10 @@ class ExternalKnowledge(nn.Module):
         embed = torch.sum(embed, 2).squeeze(2)
         return embed
 
-    def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, sk_res, res_len):
+    def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, outputs_kb):
         # Forward multiple hop mechanism
         u = [hidden.squeeze(0)]
         story_size = story.size()
-        sk_res = sk_res.unsqueeze(-2)
-        sk_res_size = sk_res.size()
         # self.m_story = []
         for hop in range(self.max_hops):
             embed_A = self.get_ck(hop, story, story_size)
@@ -368,7 +384,7 @@ class ExternalKnowledge(nn.Module):
             # concat_embed = torch.cat((embed_A, sk_res_expand), dim=-1)
             # embed_A = self.MLP_concat_embed(concat_embed)
 
-            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
+            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs, outputs_kb)
             embed_A = self.dropout_layer(embed_A)
 
             if (len(list(u[-1].size())) == 1):
@@ -384,23 +400,23 @@ class ExternalKnowledge(nn.Module):
             # concat_embed_c = torch.cat((embed_C, sk_res_expand_c), dim=-1)
             # embed_C = self.MLP_concat_embed_c(concat_embed_c)
 
-            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
+            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs, outputs_kb)
             prob = prob_.unsqueeze(2).expand_as(embed_C)
             o_k = torch.sum(embed_C * prob, 1)
             u_k = u[-1] + o_k
             u.append(u_k)
             # self.m_story.append(embed_A)
         # self.m_story.append(embed_C)
-        gl_pointer = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains)
+        gl_pointer = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, outputs_kb)
         return gl_pointer, u[-1]
 
-    def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains):
+    def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, outputs_kb):
         u_ent = [hidden.squeeze(0)]
         story_size = story.size()
         self.m_story_ent = []
         for hop in range(self.max_hops):
             embed_A = self.get_ck(hop, story, story_size)
-            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
+            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs, outputs_kb)
             embed_A = self.dropout_layer(embed_A)
 
             if (len(list(u_ent[-1].size())) == 1):
@@ -410,7 +426,7 @@ class ExternalKnowledge(nn.Module):
             prob_ = self.softmax(prob_logit)
 
             embed_C = self.get_ck(hop + 1, story, story_size)
-            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
+            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs, outputs_kb)
 
             prob = prob_.unsqueeze(2).expand_as(embed_C)
             o_k = torch.sum(embed_C * prob, 1)
@@ -527,8 +543,6 @@ class LocalMemoryDecoder(nn.Module):
         local_hiddens = []
         scores = []
 
-        H = H.contiguous()[:, :max_target_length, :]
-        # print(' ', H.size(1), max_target_length)
         # Start to generate word-by-word
         for t in range(max_target_length):
             if t != 0:

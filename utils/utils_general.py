@@ -165,7 +165,8 @@ class Dataset(data.Dataset):
         ptr_index = _cuda(ptr_index.contiguous())
         conv_arr = _cuda(conv_arr.transpose(0, 1).contiguous())
         sketch_response = _cuda(sketch_response.contiguous())
-        if (len(list(kb_arr.size())) > 1): kb_arr = _cuda(kb_arr.transpose(0, 1).contiguous())
+        if len(list(kb_arr.size())) > 1:
+            kb_arr = _cuda(kb_arr.transpose(0, 1).contiguous())
         item_info['label_arr'] = []
 
         # processed information
