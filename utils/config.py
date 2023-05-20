@@ -26,7 +26,7 @@ parser.add_argument('-l_r', '--layer_r', help='RNN Layer Number', required=False
 parser.add_argument('-lm', '--limit', help='Word Limit', required=False, default=-10000)
 parser.add_argument('-path', '--path', help='path of the file to load', required=False)
 parser.add_argument('-clip', '--clip', help='gradient clipping', required=False, default=10)
-parser.add_argument('-count', '--count', help='count for early stop', required=False, type=int, default=10)
+parser.add_argument('-count', '--count', help='count for early stop', required=False, type=int, default=8)
 parser.add_argument('-tfr', '--teacher_forcing_ratio', help='teacher_forcing_ratio', type=float, required=False,
                     default=0.9)
 
