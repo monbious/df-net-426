@@ -278,6 +278,7 @@ class ContextEncoder(nn.Module):
         self.global_classifier = nn.Sequential(
             GradientReversal(),
             CNNClassifier(2 * hidden_size, hidden_size, [2, 3], len(domains), dropout))
+        self.tfModel = TransformerModel(self.input_size, hidden_size, 4, 8, dropout, self.embedding)
 
     def get_state(self, bsz):
         """Get cell states and hidden states."""
@@ -359,7 +360,7 @@ class ExternalKnowledge(nn.Module):
         for bi in range(full_memory.size(0)):
             start, end = kb_len[bi], kb_len[bi] + conv_len[bi]
             full_memory[bi, start:end, :] = full_memory[bi, start:end, :] + hiddens[bi, :conv_len[bi], :]
-            full_memory[bi, :start, :] = full_memory[bi, :start, :] + hiddens_kb[bi, :start, :]
+            # full_memory[bi, :start, :] = full_memory[bi, :start, :] + hiddens_kb[bi, :start, :]
         return full_memory
 
     def get_ck(self, hop, story, story_size):
@@ -506,8 +507,6 @@ class LocalMemoryDecoder(nn.Module):
 
         self.global_classifier = nn.Sequential(GradientReversal(),
                                                CNNClassifier(hidden_dim, hidden_dim, [2, 3], len(domains), dropout))
-        self.tfModel = TransformerModel(self.num_vocab, hidden_dim, 4, 8, dropout, shared_emb)
-
     def get_p_vocab(self, hidden, H):
         cond = self.attn_table(torch.cat((H, hidden.unsqueeze(1).expand_as(H)), dim=-1))
         cond = F.softmax(cond.squeeze(-1), dim=-1)
