@@ -54,7 +54,8 @@ class RNN_Residual(nn.Module):
         self.batch_first = batch_first
 
     def run_rnn(self, rnn, embedded, input_lengths, batch_first=True, hx=None):
-        embedded = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths, batch_first=batch_first, enforce_sorted=False)
+        embedded = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths, batch_first=batch_first,
+                                                     enforce_sorted=False)
         outputs, hidden = rnn(embedded, hx)
         outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs, batch_first=batch_first)
         return outputs, hidden
@@ -206,10 +207,9 @@ class TransformerModel(nn.Module):
         self.init_weights()
 
         self.trans = nn.Sequential(
-            nn.Linear(2*hidden_size, hidden_size),
+            nn.Linear(2 * hidden_size, hidden_size),
         )
         self.relu = nn.LeakyReLU(0.1)
-
 
     def _generate_square_subsequent_mask(self, sz):
         mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
@@ -235,8 +235,8 @@ class TransformerModel(nn.Module):
         src = self.encoder(src) * math.sqrt(self.d_model)
         src = self.pos_encoder(src)
         output_h = self.transformer_encoder(src, self.src_mask, self.pad_mask)
-        outputs = self.decoder(output_h)
-        return outputs, output_h
+        # outputs = self.decoder(output_h)
+        return None, output_h
 
 
 class ContextEncoder(nn.Module):
@@ -255,6 +255,7 @@ class ContextEncoder(nn.Module):
         self.global_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
         self.kb_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
         self.selfatten = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
+        self.selfatten_tf = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
         for domain in domains.keys():
             setattr(self, '{}_gru'.format(domain),
                     RNN_Residual(self.odim, hidden_size, n_layers, dropout=self.dropout))
@@ -308,7 +309,7 @@ class ContextEncoder(nn.Module):
 
         local_outputs, scores = self.mix_attention(torch.stack(local_outputs, dim=-1), mask)
         outputs_ = self.MLP_H(torch.cat((F.dropout(local_outputs, self.dropout, self.training),
-                                        F.dropout(global_outputs, self.dropout, self.training)), dim=-1))
+                                         F.dropout(global_outputs, self.dropout, self.training)), dim=-1))
 
         hidden_ = self.selfatten(outputs_, input_lengths)
         label = self.global_classifier(global_outputs)
@@ -500,6 +501,7 @@ class LocalMemoryDecoder(nn.Module):
 
         self.global_classifier = nn.Sequential(GradientReversal(),
                                                CNNClassifier(hidden_dim, hidden_dim, [2, 3], len(domains), dropout))
+
     def get_p_vocab(self, hidden, H):
         cond = self.attn_table(torch.cat((H, hidden.unsqueeze(1).expand_as(H)), dim=-1))
         cond = F.softmax(cond.squeeze(-1), dim=-1)
