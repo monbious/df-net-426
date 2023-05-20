@@ -278,7 +278,7 @@ class ContextEncoder(nn.Module):
         self.global_classifier = nn.Sequential(
             GradientReversal(),
             CNNClassifier(2 * hidden_size, hidden_size, [2, 3], len(domains), dropout))
-        self.tfModel = TransformerModel(self.input_size, hidden_size, 4, 8, dropout, self.embedding)
+        self.tfModel = TransformerModel(self.input_size, hidden_size, 2, 4, dropout, self.embedding)
 
     def get_state(self, bsz):
         """Get cell states and hidden states."""
