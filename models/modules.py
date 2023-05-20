@@ -253,7 +253,7 @@ class ContextEncoder(nn.Module):
         self.embedding = nn.Embedding(input_size, args['embeddings_dim'], padding_idx=PAD_token)
         self.odim = args['embeddings_dim']
         self.global_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
-        self.kb_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
+        self.sketch_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
         self.selfatten = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
         self.selfatten_tf = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
         for domain in domains.keys():
@@ -264,7 +264,7 @@ class ContextEncoder(nn.Module):
             nn.LeakyReLU(0.1),
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
         )
-        self.MLP_kb = nn.Sequential(
+        self.MLP_sket = nn.Sequential(
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
             # nn.LeakyReLU(0.1),
             # nn.Linear(1 * self.hidden_size, 1 * self.hidden_size),
@@ -296,6 +296,9 @@ class ContextEncoder(nn.Module):
         return embedded
 
     def forward(self, input_seqs, input_lengths, data):
+        embedded_sket = self.get_embedding(data['conv_u'])
+        outputs_sket, _ = self.sketch_gru(embedded_sket, input_lengths)
+        outputs_sketch = self.MLP_sket(outputs_sket)
 
         embedded = self.get_embedding(input_seqs)
         global_outputs, global_hidden = self.global_gru(embedded, input_lengths)
@@ -317,7 +320,7 @@ class ContextEncoder(nn.Module):
         hidden_ = self.selfatten(outputs_, input_lengths)
         label = self.global_classifier(global_outputs)
 
-        return outputs_, hidden_, label, scores
+        return outputs_, hidden_, label, scores, outputs_sketch
 
 
 class ExternalKnowledge(nn.Module):

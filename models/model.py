@@ -171,7 +171,7 @@ class DFNet(nn.Module):
         else:
             story, conv_story = data['context_arr'], data['conv_arr']
 
-        dh_outputs, dh_hidden, label_e, label_mix_e = self.encoder(conv_story, data['conv_arr_lengths'], data)
+        dh_outputs, dh_hidden, label_e, label_mix_e, outputs_sketch = self.encoder(conv_story, data['conv_arr_lengths'], data)
 
         # _, outputs_hidden = self.encoder.tfModel(data['conv_u'])
         # tf_hidden = self.encoder.selfatten_tf(outputs_hidden, data['conv_arr_lengths'])
@@ -200,7 +200,7 @@ class DFNet(nn.Module):
             use_teacher_forcing,
             get_decoded_words,
             global_pointer,
-            H=dh_outputs,
+            H=outputs_sketch,
             global_entity_type=global_entity_type,
             domains=data['label_arr'],
             kb_readout=kb_readout)
