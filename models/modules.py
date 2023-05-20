@@ -275,7 +275,7 @@ class ContextEncoder(nn.Module):
             # nn.Linear(1 * self.hidden_size, 1 * self.hidden_size),
         )
 
-        self.W = nn.Linear(2 * hidden_size, hidden_size)
+        self.W = nn.Linear(hidden_size, 1)
         self.global_classifier = nn.Sequential(
             GradientReversal(),
             CNNClassifier(2 * hidden_size, hidden_size, [2, 3], len(domains), dropout))
@@ -288,7 +288,10 @@ class ContextEncoder(nn.Module):
     def get_embedding(self, input_seqs):
         embedded = self.embedding(input_seqs.contiguous().view(input_seqs.size(0), -1).long())
         embedded = embedded.view(input_seqs.size() + (embedded.size(-1),))
-        embedded = torch.sum(embedded, 2).squeeze(2)
+        score = self.W(embedded).squeeze(-1)
+        score_p = torch.softmax(score, dim=-1)
+        embedded = score_p.unsqueeze(-1).expand_as(embedded).mul(embedded).sum(2)
+        # embedded = torch.sum(embedded, 2).squeeze(2)
         embedded = self.dropout_layer(embedded.transpose(0, 1))
         return embedded
 

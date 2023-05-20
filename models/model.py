@@ -172,12 +172,13 @@ class DFNet(nn.Module):
             story, conv_story = data['context_arr'], data['conv_arr']
 
         dh_outputs, dh_hidden, label_e, label_mix_e = self.encoder(conv_story, data['conv_arr_lengths'], data)
-        _, outputs_hidden = self.encoder.tfModel(data['conv_u'])
-        tf_hidden = self.encoder.selfatten_tf(outputs_hidden, data['conv_arr_lengths'])
+
+        # _, outputs_hidden = self.encoder.tfModel(data['conv_u'])
+        # tf_hidden = self.encoder.selfatten_tf(outputs_hidden, data['conv_arr_lengths'])
         # dh_hidden = self.encoder.W_hid(torch.cat((dh_hidden, tf_hidden), dim=-1))
 
         global_pointer, kb_readout = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
-                            tf_hidden, outputs_hidden, data['domain'])
+                            dh_hidden, dh_outputs, data['domain'])
         # encoded_hidden = torch.cat((dh_hidden, kb_readout), dim=1)
 
         # Get the words that can be copy from the memory
@@ -192,14 +193,14 @@ class DFNet(nn.Module):
             story.size(),
             data['context_arr_lengths'],
             self.copy_list,
-            tf_hidden,
+            dh_hidden,
             data['sketch_response'],
             max_target_length,
             batch_size,
             use_teacher_forcing,
             get_decoded_words,
             global_pointer,
-            H=outputs_hidden,
+            H=dh_outputs,
             global_entity_type=global_entity_type,
             domains=data['label_arr'],
             kb_readout=kb_readout)
