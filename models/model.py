@@ -171,7 +171,7 @@ class DFNet(nn.Module):
         else:
             story, conv_story = data['context_arr'], data['conv_arr']
 
-        dh_outputs, dh_hidden, label_e, label_mix_e, outputs_sketch = self.encoder(conv_story, data['conv_arr_lengths'], data)
+        dh_outputs, dh_hidden, label_e, label_mix_e, outputs_sketch, sket_hidden = self.encoder(conv_story, data['conv_arr_lengths'], data)
 
         # _, outputs_hidden = self.encoder.tfModel(data['conv_u'])
         # tf_hidden = self.encoder.selfatten_tf(outputs_hidden, data['conv_arr_lengths'])
@@ -193,7 +193,7 @@ class DFNet(nn.Module):
             story.size(),
             data['context_arr_lengths'],
             self.copy_list,
-            dh_hidden,
+            sket_hidden,
             data['sketch_response'],
             max_target_length,
             batch_size,

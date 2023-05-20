@@ -255,7 +255,7 @@ class ContextEncoder(nn.Module):
         self.global_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
         self.sketch_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
         self.selfatten = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
-        self.selfatten_tf = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
+        self.selfatten_sket = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
         for domain in domains.keys():
             setattr(self, '{}_gru'.format(domain),
                     RNN_Residual(self.odim, hidden_size, n_layers, dropout=self.dropout))
@@ -288,9 +288,6 @@ class ContextEncoder(nn.Module):
     def get_embedding(self, input_seqs):
         embedded = self.embedding(input_seqs.contiguous().view(input_seqs.size(0), -1).long())
         embedded = embedded.view(input_seqs.size() + (embedded.size(-1),))
-        # score = self.W(embedded).squeeze(-1)
-        # score_p = torch.softmax(score, dim=-1)
-        # embedded = score_p.unsqueeze(-1).expand_as(embedded).mul(embedded).sum(2)
         embedded = torch.sum(embedded, 2).squeeze(2)
         embedded = self.dropout_layer(embedded.transpose(0, 1))
         return embedded
@@ -299,6 +296,7 @@ class ContextEncoder(nn.Module):
         embedded_sket = self.dropout_layer(self.embedding(data['conv_u']))
         outputs_sket, _ = self.sketch_gru(embedded_sket, data['conv_u_lengths'])
         outputs_sketch = self.MLP_sket(outputs_sket)
+        sket_hidden =  self.selfatten_sket(outputs_sketch, data['conv_u_lengths'])
 
         embedded = self.get_embedding(input_seqs)
         global_outputs, global_hidden = self.global_gru(embedded, input_lengths)
@@ -320,7 +318,7 @@ class ContextEncoder(nn.Module):
         hidden_ = self.selfatten(outputs_, input_lengths)
         label = self.global_classifier(global_outputs)
 
-        return outputs_, hidden_, label, scores, outputs_sketch
+        return outputs_, hidden_, label, scores, outputs_sketch, sket_hidden
 
 
 class ExternalKnowledge(nn.Module):

@@ -17,6 +17,7 @@ def read_langs(file_name, max_line=None):
     kb_plains = []
     counter_set1, counter_set2 = set(), set()
     ent_history = []
+    conv_u = []
 
     with open('data/KVR/kvret_entities.json') as f:
         global_entity = json.load(f)
@@ -39,10 +40,11 @@ def read_langs(file_name, max_line=None):
                     # Get gold entity for each domain
                     gold_ent = ast.literal_eval(gold_ent)
 
-                    conv_u, _ = generate_template(global_entity, u, gold_ent, kb_arr, task_type)
-                    gen_u = generate_memory(u, "$u", str(nid), task_type, global_entity, conv_u)
+                    sket_u, _ = generate_template(global_entity, u, gold_ent, kb_arr, task_type)
+                    gen_u = generate_memory(u, "$u", str(nid), task_type, global_entity, sket_u)
                     context_arr += gen_u
                     conv_arr += gen_u
+                    conv_u.append(sket_u)
 
                     ent_idx_cal, ent_idx_nav, ent_idx_wet = [], [], []
                     if task_type == "weather":
@@ -74,12 +76,13 @@ def read_langs(file_name, max_line=None):
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
 
                     kb_txt = ' '.join(kb_plains)
-                    # conv_u = ' '.join([w[0] for w in conv_arr])
+                    conv_u_txt = ' '.join(conv_u)
+                    # print(conv_u_txt)
                     data_detail = {
                         'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
                         'response': r,
                         'sketch_response': sketch_response,
-                        'conv_u': conv_u,
+                        'conv_u': conv_u_txt,
                         'gold_sketch': gold_sketch,
                         'ptr_index': ptr_index + [len(context_arr)],
                         'selector_index': selector_index,
@@ -98,6 +101,7 @@ def read_langs(file_name, max_line=None):
                     gen_r = generate_memory(r, "$s", str(nid), task_type, global_entity, sketch_response)
                     context_arr += gen_r
                     conv_arr += gen_r
+                    conv_u.append(sketch_response)
 
                     if max_resp_len < len(r.split()):
                         max_resp_len = len(r.split())
@@ -134,6 +138,7 @@ def read_langs(file_name, max_line=None):
                 counter_set1.clear()
                 counter_set2.clear()
                 ent_history = []
+                conv_u = []
                 if (max_line and cnt_lin >= max_line):
                     break
 
