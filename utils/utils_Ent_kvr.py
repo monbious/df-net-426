@@ -36,12 +36,13 @@ def read_langs(file_name, max_line=None):
 
                 if '\t' in line:
                     u, r, gold_ent = line.split('\t')
-                    gen_u = generate_memory(u, "$u", str(nid))
-                    context_arr += gen_u
-                    conv_arr += gen_u
-
                     # Get gold entity for each domain
                     gold_ent = ast.literal_eval(gold_ent)
+
+                    conv_u, _ = generate_template(global_entity, u, gold_ent, kb_arr, task_type)
+                    gen_u = generate_memory(u, "$u", str(nid), task_type, global_entity, conv_u)
+                    context_arr += gen_u
+                    conv_arr += gen_u
 
                     ent_idx_cal, ent_idx_nav, ent_idx_wet = [], [], []
                     if task_type == "weather":
@@ -52,6 +53,7 @@ def read_langs(file_name, max_line=None):
                         ent_idx_nav = gold_ent
                     ent_index = list(set(ent_idx_cal + ent_idx_nav + ent_idx_wet))
                     ent_history += ent_index
+
                     # Get local pointer position for each word in system response
                     ptr_index = []
                     for key in r.split():
@@ -70,7 +72,6 @@ def read_langs(file_name, max_line=None):
                                       for word_arr in context_arr] + [0]
 
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
-                    conv_u, _ = generate_template(global_entity, u, gold_ent, kb_arr, task_type)
 
                     kb_txt = ' '.join(kb_plains)
                     # conv_u = ' '.join([w[0] for w in conv_arr])
@@ -94,7 +95,7 @@ def read_langs(file_name, max_line=None):
 
                     data.append(data_detail)
 
-                    gen_r = generate_memory(r, "$s", str(nid))
+                    gen_r = generate_memory(r, "$s", str(nid), task_type, global_entity, sketch_response)
                     context_arr += gen_r
                     conv_arr += gen_r
 
@@ -121,7 +122,7 @@ def read_langs(file_name, max_line=None):
                             else:
                                 kb_plains += r_split[2:]
 
-                    kb_info = generate_memory(r, "", str(nid))
+                    kb_info = generate_memory(r, "", str(nid), task_type, global_entity)
                     context_arr = kb_info + context_arr
                     kb_arr += kb_info
 
@@ -178,15 +179,41 @@ def generate_template(global_entity, sentence, sent_ent, kb_arr, domain):
     return sketch_response, gold_sketch
 
 
-def generate_memory(sent, speaker, time):
+def get_ent_type(word, global_entity):
+    ent_type = ''
+    for key in global_entity.keys():
+        if key != 'poi':
+            global_entity[key] = [x.lower() for x in global_entity[key]]
+            if word in global_entity[key] or word.replace('_', ' ') in global_entity[key]:
+                ent_type = key
+                break
+        else:
+            poi_list = [d['poi'].lower() for d in global_entity['poi']]
+            if word in poi_list or word.replace('_', ' ') in poi_list:
+                ent_type = key
+                break
+    return '@' + ent_type
+
+
+def generate_memory(sent, speaker, time, task_type, global_entity, sket_sent=None):
     sent_new = []
     sent_token = sent.split(' ')
     if speaker == "$u" or speaker == "$s":
+        sket_sents = sket_sent.split()
         for idx, word in enumerate(sent_token):
-            temp = [word, speaker, 'turn' + str(time), 'word' + str(idx)] + ["PAD"] * (MEM_TOKEN_SIZE - 4)
+            if '@' not in sket_sents[idx]:
+                ent_format = 'PAD'
+            else:
+                ent_format = sket_sents[idx]
+            temp = [word, speaker, 'turn' + str(time), 'word' + str(idx), ent_format] + ["PAD"] * (MEM_TOKEN_SIZE - 5)
             sent_new.append(temp)
     else:
-        sent_token = sent_token[::-1] + ["PAD"] * (MEM_TOKEN_SIZE - len(sent_token))
+        ent_format = None
+        if task_type != 'weather':
+            ent_format = '@' + sent_token[-2]
+        if ent_format is None:
+            ent_format = get_ent_type(sent_token[-1], global_entity)
+        sent_token = sent_token[::-1] + [ent_format] + ["PAD"] * (MEM_TOKEN_SIZE - len(sent_token) - 1)
         sent_new.append(sent_token)
     return sent_new
 
