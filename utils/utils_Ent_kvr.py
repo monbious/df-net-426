@@ -16,6 +16,7 @@ def read_langs(file_name, max_line=None):
     kb_source = []
     kb_plains = []
     counter_set1, counter_set2 = set(), set()
+    ent_history = []
 
     with open('data/KVR/kvret_entities.json') as f:
         global_entity = json.load(f)
@@ -65,7 +66,7 @@ def read_langs(file_name, max_line=None):
                     elif task_type == "navigate":
                         ent_idx_nav = gold_ent
                     ent_index = list(set(ent_idx_cal + ent_idx_nav + ent_idx_wet))
-
+                    ent_history += ent_index
                     # Get local pointer position for each word in system response
                     ptr_index = []
                     for key in r.split():
@@ -78,14 +79,14 @@ def read_langs(file_name, max_line=None):
 
                     # Get global pointer labels for words in system response, the 1 in the end is for the NULL token
                     #  or word_arr[0] in r.split()
-                    selector_index = [1 if (word_arr[0] in ent_index) else 0
+                    ent_history = list(set(ent_history))
+                    selector_index = [1 if (word_arr[0] in ent_history) else 0
                                       for word_arr in context_arr] + [1]
 
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
 
                     kb_txt = ' '.join(kb_plains)
                     conv_u = ' '.join([w[0] for w in conv_arr])
-                    kb_arr = [['$$$$'] * MEM_TOKEN_SIZE] if len(kb_arr) == 0 else kb_arr
                     data_detail = {
                         'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
                         'response': r,
@@ -109,6 +110,7 @@ def read_langs(file_name, max_line=None):
                     gen_r = generate_memory(r, "$s", str(nid))
                     context_arr += gen_r
                     conv_arr += gen_r
+
                     if max_resp_len < len(r.split()):
                         max_resp_len = len(r.split())
                     sample_counter += 1
@@ -143,6 +145,7 @@ def read_langs(file_name, max_line=None):
                 kb_plains = []
                 counter_set1.clear()
                 counter_set2.clear()
+                ent_history = []
                 if (max_line and cnt_lin >= max_line):
                     break
 

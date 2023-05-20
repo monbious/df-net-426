@@ -313,13 +313,7 @@ class ContextEncoder(nn.Module):
         hidden_ = self.selfatten(outputs_, input_lengths)
         label = self.global_classifier(global_outputs)
 
-        embed_kb = self.get_embedding(data['kb_arr'])
-        outputs_kb, hidden_kb = self.kb_gru(embed_kb, data['kb_arr_lengths'], hidden_.unsqueeze(0))
-        # print(hidden_kb.shape)
-        outputs_kb_ = self.MLP_kb(outputs_kb)
-        hidden_kb_ = self.W_hid(hidden_kb)
-
-        return outputs_, hidden_, label, scores, outputs_kb_, hidden_kb_[0]
+        return outputs_, hidden_, label, scores
 
 
 class ExternalKnowledge(nn.Module):
@@ -356,11 +350,10 @@ class ExternalKnowledge(nn.Module):
             nn.Linear(1 * self.embedding_dim, 1 * self.embedding_dim),
         )
 
-    def add_lm_embedding(self, full_memory, kb_len, conv_len, hiddens, hiddens_kb):
+    def add_lm_embedding(self, full_memory, kb_len, conv_len, hiddens):
         for bi in range(full_memory.size(0)):
             start, end = kb_len[bi], kb_len[bi] + conv_len[bi]
             full_memory[bi, start:end, :] = full_memory[bi, start:end, :] + hiddens[bi, :conv_len[bi], :]
-            # full_memory[bi, :start, :] = full_memory[bi, :start, :] + hiddens_kb[bi, :start, :]
         return full_memory
 
     def get_ck(self, hop, story, story_size):
@@ -376,7 +369,7 @@ class ExternalKnowledge(nn.Module):
         embed = torch.sum(embed, 2).squeeze(2)
         return embed
 
-    def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, outputs_kb):
+    def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains):
         # Forward multiple hop mechanism
         u = [hidden.squeeze(0)]
         story_size = story.size()
@@ -389,7 +382,7 @@ class ExternalKnowledge(nn.Module):
             # concat_embed = torch.cat((embed_A, sk_res_expand), dim=-1)
             # embed_A = self.MLP_concat_embed(concat_embed)
 
-            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs, outputs_kb)
+            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
             embed_A = self.dropout_layer(embed_A)
 
             if (len(list(u[-1].size())) == 1):
@@ -405,23 +398,23 @@ class ExternalKnowledge(nn.Module):
             # concat_embed_c = torch.cat((embed_C, sk_res_expand_c), dim=-1)
             # embed_C = self.MLP_concat_embed_c(concat_embed_c)
 
-            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs, outputs_kb)
+            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
             prob = prob_.unsqueeze(2).expand_as(embed_C)
             o_k = torch.sum(embed_C * prob, 1)
             u_k = u[-1] + o_k
             u.append(u_k)
             # self.m_story.append(embed_A)
         # self.m_story.append(embed_C)
-        gl_pointer = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, outputs_kb)
+        gl_pointer = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains)
         return gl_pointer, u[-1]
 
-    def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, outputs_kb):
+    def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains):
         u_ent = [hidden.squeeze(0)]
         story_size = story.size()
         self.m_story_ent = []
         for hop in range(self.max_hops):
             embed_A = self.get_ck(hop, story, story_size)
-            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs, outputs_kb)
+            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
             embed_A = self.dropout_layer(embed_A)
 
             if (len(list(u_ent[-1].size())) == 1):
@@ -431,7 +424,7 @@ class ExternalKnowledge(nn.Module):
             prob_ = self.softmax(prob_logit)
 
             embed_C = self.get_ck(hop + 1, story, story_size)
-            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs, outputs_kb)
+            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
 
             prob = prob_.unsqueeze(2).expand_as(embed_C)
             o_k = torch.sum(embed_C * prob, 1)
