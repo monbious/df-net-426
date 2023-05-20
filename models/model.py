@@ -171,10 +171,10 @@ class DFNet(nn.Module):
         else:
             story, conv_story = data['context_arr'], data['conv_arr']
 
-        dh_outputs, dh_hidden, label_e, label_mix_e, outputs_kb, _ = self.encoder(conv_story, data['conv_arr_lengths'], data)
+        dh_outputs, dh_hidden, label_e, label_mix_e, outputs_kb, hidden_kb = self.encoder(conv_story, data['conv_arr_lengths'], data)
 
         global_pointer, kb_readout = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
-                            dh_hidden, dh_outputs, data['domain'], outputs_kb)
+                            hidden_kb, dh_outputs, data['domain'], outputs_kb)
         # encoded_hidden = torch.cat((dh_hidden, kb_readout), dim=1)
 
         _, outputs_hidden = self.encoder.tfModel(data['conv_u'])
