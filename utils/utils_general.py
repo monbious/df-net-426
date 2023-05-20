@@ -145,14 +145,14 @@ class Dataset(data.Dataset):
         sketch_response, _ = merge(item_info['sketch_response'], False)
         kb_arr, kb_arr_lengths = merge(item_info['kb_arr'], True)
 
-        conv_u, _ = merge(item_info['conv_u'], False)
+        conv_u, conv_u_lengths = merge(item_info['conv_u'], False)
         conv_r = sketch_response.clone()
-        if conv_u.size(1) > conv_r.size(1):
-            length = conv_u.size(1)
-            conv_r = torch.cat((conv_r, torch.ones(conv_r.size(0), length-conv_r.size(1)).long()), dim=-1)
-        else:
-            length = conv_r.size(1)
-            conv_u = torch.cat((conv_u, torch.ones(conv_u.size(0), length - conv_u.size(1)).long()), dim=-1)
+        # if conv_u.size(1) > conv_r.size(1):
+        #     length = conv_u.size(1)
+        #     conv_r = torch.cat((conv_r, torch.ones(conv_r.size(0), length-conv_r.size(1)).long()), dim=-1)
+        # else:
+        #     length = conv_r.size(1)
+        #     conv_u = torch.cat((conv_u, torch.ones(conv_u.size(0), length - conv_u.size(1)).long()), dim=-1)
 
         max_seq_len = conv_arr.size(1)
         label_arr = _cuda(torch.Tensor([domains[label] for label in item_info['domain']]).long().unsqueeze(-1))
@@ -184,6 +184,7 @@ class Dataset(data.Dataset):
         data_info['response_lengths'] = response_lengths
         data_info['conv_arr_lengths'] = conv_arr_lengths
         data_info['kb_arr_lengths'] = kb_arr_lengths
+        data_info['conv_u_lengths'] = conv_u_lengths
         return data_info
 
 

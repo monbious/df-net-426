@@ -296,8 +296,8 @@ class ContextEncoder(nn.Module):
         return embedded
 
     def forward(self, input_seqs, input_lengths, data):
-        embedded_sket = self.get_embedding(data['conv_u'])
-        outputs_sket, _ = self.sketch_gru(embedded_sket, input_lengths)
+        embedded_sket = self.dropout_layer(self.embedding(data['conv_u']))
+        outputs_sket, _ = self.sketch_gru(embedded_sket, data['conv_u_lengths'])
         outputs_sketch = self.MLP_sket(outputs_sket)
 
         embedded = self.get_embedding(input_seqs)
