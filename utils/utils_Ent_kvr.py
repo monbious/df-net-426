@@ -40,11 +40,13 @@ def read_langs(file_name, max_line=None):
                     # Get gold entity for each domain
                     gold_ent = ast.literal_eval(gold_ent)
 
-                    sket_u, _ = generate_template(global_entity, u, gold_ent, kb_arr, task_type)
-                    gen_u = generate_memory(u, "$u", str(nid), task_type, global_entity, sket_u)
+                    sket_u_plain, _ = generate_template(global_entity, u, gold_ent, kb_arr, task_type)
+                    gen_u = generate_memory(u, "$u", str(nid), task_type, global_entity, sket_u_plain)
                     context_arr += gen_u
                     conv_arr += gen_u
-                    conv_u.append(sket_u)
+
+                    sket_u = generate_memory(sket_u_plain, "$u", str(nid), task_type, global_entity, sket_u_plain)
+                    conv_u += sket_u
 
                     ent_idx_cal, ent_idx_nav, ent_idx_wet = [], [], []
                     if task_type == "weather":
@@ -76,13 +78,11 @@ def read_langs(file_name, max_line=None):
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
 
                     kb_txt = ' '.join(kb_plains)
-                    conv_u_txt = ' '.join(conv_u)
-                    # print(conv_u_txt)
                     data_detail = {
                         'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
                         'response': r,
                         'sketch_response': sketch_response,
-                        'conv_u': conv_u_txt,
+                        'conv_u': list(conv_u),
                         'gold_sketch': gold_sketch,
                         'ptr_index': ptr_index + [len(context_arr)],
                         'selector_index': selector_index,
@@ -101,7 +101,9 @@ def read_langs(file_name, max_line=None):
                     gen_r = generate_memory(r, "$s", str(nid), task_type, global_entity, sketch_response)
                     context_arr += gen_r
                     conv_arr += gen_r
-                    conv_u.append(sketch_response)
+
+                    sket_r = generate_memory(sketch_response, "$s", str(nid), task_type, global_entity, sketch_response)
+                    conv_u += sket_r
 
                     if max_resp_len < len(r.split()):
                         max_resp_len = len(r.split())

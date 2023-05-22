@@ -70,7 +70,7 @@ class Dataset(data.Dataset):
         sketch_response = self.preprocess(sketch_response, self.trg_word2id)
 
         conv_u = self.data_info['conv_u'][index]
-        conv_u = self.preprocess(conv_u, self.src_word2id)[:-1]
+        conv_u = self.preprocess(conv_u, self.src_word2id, trg=False)
 
         # processed information
         data_info = {}
@@ -145,22 +145,14 @@ class Dataset(data.Dataset):
         sketch_response, _ = merge(item_info['sketch_response'], False)
         kb_arr, kb_arr_lengths = merge(item_info['kb_arr'], True)
 
-        conv_u, conv_u_lengths = merge(item_info['conv_u'], False)
-        conv_r = sketch_response.clone()
-        # if conv_u.size(1) > conv_r.size(1):
-        #     length = conv_u.size(1)
-        #     conv_r = torch.cat((conv_r, torch.ones(conv_r.size(0), length-conv_r.size(1)).long()), dim=-1)
-        # else:
-        #     length = conv_r.size(1)
-        #     conv_u = torch.cat((conv_u, torch.ones(conv_u.size(0), length - conv_u.size(1)).long()), dim=-1)
+        conv_u, conv_u_lengths = merge(item_info['conv_u'], True)
 
         max_seq_len = conv_arr.size(1)
         label_arr = _cuda(torch.Tensor([domains[label] for label in item_info['domain']]).long().unsqueeze(-1))
         # convert to contiguous and cuda
         context_arr = _cuda(context_arr.contiguous())
         response = _cuda(response.contiguous())
-        conv_u = _cuda(conv_u.contiguous())
-        conv_r = _cuda(conv_r.contiguous())
+        conv_u = _cuda(conv_u.transpose(0, 1).contiguous())
         selector_index = _cuda(selector_index.contiguous())
         ptr_index = _cuda(ptr_index.contiguous())
         conv_arr = _cuda(conv_arr.transpose(0, 1).contiguous())
@@ -176,8 +168,6 @@ class Dataset(data.Dataset):
                 data_info[k] = locals()[k]
             except:
                 data_info[k] = item_info[k]
-
-        data_info['conv_r'] = conv_r
 
         # additional plain information
         data_info['context_arr_lengths'] = context_arr_lengths

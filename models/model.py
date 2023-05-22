@@ -167,11 +167,12 @@ class DFNet(nn.Module):
             rand_mask = self._cuda(rand_mask)
             conv_rand_mask = self._cuda(conv_rand_mask)
             conv_story = data['conv_arr'] * conv_rand_mask.long()
+            conv_u = data['conv_u'] * conv_rand_mask.long()
             story = data['context_arr'] * rand_mask.long()
         else:
-            story, conv_story = data['context_arr'], data['conv_arr']
+            story, conv_story, conv_u = data['context_arr'], data['conv_arr'], data['conv_u']
 
-        dh_outputs, dh_hidden, label_e, label_mix_e, outputs_sketch, sket_hidden = self.encoder(conv_story, data['conv_arr_lengths'], data)
+        dh_outputs, dh_hidden, label_e, label_mix_e, outputs_sketch, sket_hidden = self.encoder(conv_story, data['conv_arr_lengths'], conv_u)
 
         # _, outputs_hidden = self.encoder.tfModel(data['conv_u'])
         # tf_hidden = self.encoder.selfatten_tf(outputs_hidden, data['conv_arr_lengths'])
