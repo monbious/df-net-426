@@ -296,7 +296,7 @@ class ContextEncoder(nn.Module):
         embedded_sket = self.dropout_layer(self.embedding(data['conv_u']))
         outputs_sket, _ = self.sketch_gru(embedded_sket, data['conv_u_lengths'])
         outputs_sketch = self.MLP_sket(outputs_sket)
-        sket_hidden =  self.selfatten_sket(outputs_sketch, data['conv_u_lengths'])
+        sket_hidden = self.selfatten_sket(outputs_sketch, data['conv_u_lengths'])
 
         embedded = self.get_embedding(input_seqs)
         global_outputs, global_hidden = self.global_gru(embedded, input_lengths)
