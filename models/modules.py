@@ -254,7 +254,6 @@ class ContextEncoder(nn.Module):
         self.odim = args['embeddings_dim']
         self.global_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
         self.sketch_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
-        self.sketch_gru1 = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
         self.selfatten = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
         self.selfatten_sket = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
 
@@ -267,8 +266,6 @@ class ContextEncoder(nn.Module):
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
         )
         self.MLP_sket = nn.Sequential(
-            nn.Linear(4 * self.hidden_size, 2 * self.hidden_size),
-            nn.LeakyReLU(0.1),
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
         )
         self.W_hid = nn.Sequential(
@@ -294,14 +291,12 @@ class ContextEncoder(nn.Module):
         embedded = self.dropout_layer(embedded.transpose(0, 1))
         return embedded
 
-    def forward(self, input_seqs, input_lengths, sket_input_seqs):
+    def forward(self, input_seqs, input_lengths, sket_input_seqs, sket_input_lens):
         embedded_sket = self.get_embedding(sket_input_seqs)
-        outputs_sket, _ = self.sketch_gru(embedded_sket, input_lengths)
-        outputs_sket1, _ = self.sketch_gru1(embedded_sket, input_lengths)
+        outputs_sket, _ = self.sketch_gru(embedded_sket, sket_input_lens)
 
-        outputs_sketch = self.MLP_sket(torch.cat((F.dropout(outputs_sket, self.dropout, self.training),
-                                                  F.dropout(outputs_sket1, self.dropout, self.training)), dim=-1))
-        sket_hidden = self.selfatten_sket(outputs_sketch, input_lengths)
+        outputs_sketch = self.MLP_sket(outputs_sket)
+        sket_hidden = self.selfatten_sket(outputs_sketch, sket_input_lens)
 
         embedded = self.get_embedding(input_seqs)
         global_outputs, global_hidden = self.global_gru(embedded, input_lengths)
@@ -339,12 +334,6 @@ class ExternalKnowledge(nn.Module):
             self.add_module("C_{}".format(hop), C)
         self.C = AttrProxy(self, "C_")
 
-        # for hop in range(self.max_hops + 1):
-        #     C_ent = nn.Embedding(vocab, embedding_dim, padding_idx=PAD_token)
-        #     C_ent.weight.data.normal_(0, 0.1)
-        #     self.add_module("C_ent_{}".format(hop), C_ent)
-        # self.C_ent = AttrProxy(self, "C_ent_")
-
         self.softmax = nn.Softmax(dim=1)
         self.sigmoid = nn.Sigmoid()
         self.conv_layer = nn.Conv1d(embedding_dim, embedding_dim, 5, padding=2)
@@ -358,6 +347,10 @@ class ExternalKnowledge(nn.Module):
             nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
             nn.LeakyReLU(0.1),
             nn.Linear(1 * self.embedding_dim, 1 * self.embedding_dim),
+        )
+        self.relu = nn.LeakyReLU(0.1)
+        self.fused = nn.Sequential(
+            nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
         )
 
     def add_lm_embedding(self, full_memory, kb_len, conv_len, hiddens):
@@ -381,6 +374,9 @@ class ExternalKnowledge(nn.Module):
 
     def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains):
         # Forward multiple hop mechanism
+        hidden = self.relu(self.fused(hidden))
+        dh_outputs = self.relu(self.fused(dh_outputs))
+
         u = [hidden.squeeze(0)]
         story_size = story.size()
         # self.m_story = []

@@ -48,6 +48,21 @@ def read_langs(file_name, max_line=None):
                     sket_u = generate_memory(sket_u_plain, "$u", str(nid), task_type, global_entity, sket_u_plain)
                     conv_u += sket_u
 
+                    # [word, speaker, 'turn' + str(time), 'word' + str(idx)] + ["PAD"] * (MEM_TOKEN_SIZE - 4)
+                    # for i, ent in enumerate(gold_ent):
+                    #     if ent in u:
+                    #         ref = list(set([t for tup in kb_source if (ent in tup)
+                    #                         for t in tup if t not in global_entity_keys and t != ent]))
+                    #         context_arr.append(
+                    #             [ent, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
+                    #         conv_arr.append(
+                    #             [ent, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
+                    #         for refer in ref:
+                    #             context_arr.append(
+                    #                 [refer, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
+                    #             conv_arr.append(
+                    #                 [refer, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
+
                     ent_idx_cal, ent_idx_nav, ent_idx_wet = [], [], []
                     if task_type == "weather":
                         ent_idx_wet = gold_ent
