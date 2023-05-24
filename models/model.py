@@ -191,7 +191,7 @@ class DFNet(nn.Module):
             story.size(),
             data['context_arr_lengths'],
             self.copy_list,
-            sket_hidden,
+            fused_hidden,
             data['sketch_response'],
             max_target_length,
             batch_size,

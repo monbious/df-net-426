@@ -535,8 +535,8 @@ class LocalMemoryDecoder(nn.Module):
             _cuda(torch.LongTensor([SOS_token] * batch_size)))
         memory_mask_for_step = _cuda(torch.ones(story_size[0], story_size[1]))
         decoded_fine, decoded_coarse = [], []
-        # hidden = self.relu(self.projector(encode_hidden)).unsqueeze(0)
-        hidden = encode_hidden.unsqueeze(0)
+        hidden = self.relu(self.projector(encode_hidden)).unsqueeze(0)
+        # hidden = encode_hidden.unsqueeze(0)
         hidden_locals = []
         for i in range(len(self.domains)):
             hidden_locals.append(hidden.clone())
