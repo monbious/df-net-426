@@ -201,7 +201,8 @@ class DFNet(nn.Module):
             H=outputs_sketch,
             global_entity_type=global_entity_type,
             domains=data['label_arr'],
-            kb_readout=kb_readout)
+            kb_readout=kb_readout,
+            outputs=dh_outputs)
 
         return outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, global_pointer, \
                label_e, label_d, label_mix_e, label_mix_d, None
