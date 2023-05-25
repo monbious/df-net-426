@@ -67,8 +67,6 @@ def read_langs(file_name, max_line=None):
                     #             conv_u.append(
                     #                 [get_ent_type(refer, global_entity), "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
 
-                    # print(context_arr, '\n', conv_arr, '\n', conv_u)
-                    # print('='*50)
                     ent_idx_cal, ent_idx_nav, ent_idx_wet = [], [], []
                     if task_type == "weather":
                         ent_idx_wet = gold_ent
@@ -98,12 +96,15 @@ def read_langs(file_name, max_line=None):
 
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
 
-                    kb_txt = ' '.join(kb_plains)
-                    conv_u_tf = ' '.join([w[0] for w in conv_u])
+                    kb_txt = ' '.join(kb_plains) if len(kb_plains) > 0 else ' '.join([w[0] for w in conv_arr])
+
+                    conv_u_tf = ' '.join([w[0] for w in conv_arr]) if len(kb_plains) > 0 else ' '.join(w[0] for w in gen_u)
+
                     data_detail = {
                         'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
                         'response': r,
                         'sketch_response': sketch_response,
+                        'kb_txt': kb_txt,
                         'conv_u_tf': conv_u_tf,
                         'conv_u': list(conv_u),
                         'gold_sketch': gold_sketch,

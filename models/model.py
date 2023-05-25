@@ -168,17 +168,16 @@ class DFNet(nn.Module):
             conv_rand_mask = self._cuda(conv_rand_mask)
             conv_story = data['conv_arr'] * conv_rand_mask.long()
             conv_u = data['conv_u'] * conv_rand_mask[:data['conv_u'].size(0), :, :].contiguous().long()
-            conv_u_tf = data['conv_u_tf'] * conv_rand_mask.transpose(0, 1)[:, :, 0].long()
             story = data['context_arr'] * rand_mask.long()
         else:
-            story, conv_story, conv_u, conv_u_tf = data['context_arr'], data['conv_arr'], data['conv_u'], data['conv_u_tf']
+            story, conv_story, conv_u = data['context_arr'], data['conv_arr'], data['conv_u']
 
         dh_outputs, dh_hidden, label_e, label_mix_e, outputs_sketch, sket_hidden = self.encoder(conv_story, data['conv_arr_lengths'], conv_u, data['conv_u_lengths'])
 
         fused_hidden = torch.cat((dh_hidden, sket_hidden), dim=-1)
         fused_outputs = torch.cat((dh_outputs, outputs_sketch), dim=-1)
         global_pointer, kb_readout = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
-                            fused_hidden, fused_outputs, data['domain'])
+                            fused_hidden, dh_outputs, data['domain'])
 
         # Get the words that can be copy from the memory
         batch_size = len(data['context_arr_lengths'])
@@ -187,7 +186,7 @@ class DFNet(nn.Module):
             elm_temp = [word_arr[0] for word_arr in elm]
             self.copy_list.append(elm_temp)
 
-        outputs_tf = self.encoder.tfModel(conv_u_tf)
+        outputs_tf = self.encoder.tfModel(data['kb_txt'], data['conv_u_tf'])
 
         outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, label_d, label_mix_d = self.decoder.forward(
             self.extKnow,

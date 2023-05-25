@@ -202,6 +202,9 @@ class TransformerModel(nn.Module):
         self.encoder = embedding
         self.src_mask = None
         self.pad_mask = None
+        self.transformer_decoder = nn.TransformerDecoder(
+            nn.TransformerDecoderLayer(hidden_size, num_heads, hidden_size, dropout_prob, batch_first=True),
+            num_layers)
 
         self.decoder = nn.Linear(hidden_size, n_token)
         self.init_weights()
@@ -222,21 +225,29 @@ class TransformerModel(nn.Module):
         nn.init.zeros_(self.decoder.bias)
         nn.init.uniform_(self.decoder.weight, -initrange, initrange)
 
-    def forward(self, src, has_mask=True):
+    def forward(self, refer, inputs, has_mask=True):
         if has_mask:
-            if self.src_mask is None or self.src_mask.size(1) != src.size(1):
-                mask = self._generate_square_subsequent_mask(src.size(1))
+            if self.src_mask is None or self.src_mask.size(1) != inputs.size(1):
+                mask = self._generate_square_subsequent_mask(inputs.size(1))
                 self.src_mask = _cuda(mask)
-            self.pad_mask = _cuda((src == PAD_token))
+            self.pad_mask = _cuda((inputs == PAD_token))
+            refer_mask = _cuda(self._generate_square_subsequent_mask(refer.size(1)))
+            refer_pad_mask = _cuda((refer == PAD_token))
         else:
             self.src_mask = None
             self.pad_mask = None
+            refer_mask = None
+            refer_pad_mask = None
 
-        src = self.encoder(src) * math.sqrt(self.d_model)
-        src = self.pos_encoder(src)
-        output_h = self.transformer_encoder(src, self.src_mask, self.pad_mask)
-        # outputs = self.decoder(output_h)
-        return output_h
+        refer = self.encoder(refer) * math.sqrt(self.d_model)
+        refer = self.pos_encoder(refer)
+        output_en = self.transformer_encoder(refer, refer_mask, refer_pad_mask)
+
+        inputs = self.encoder(inputs) * math.sqrt(self.d_model)
+        inputs = self.pos_encoder(inputs)
+        output_de = self.transformer_decoder(inputs, output_en, self.src_mask, tgt_key_padding_mask=self.pad_mask)
+
+        return output_de
 
 
 class ContextEncoder(nn.Module):
@@ -374,8 +385,8 @@ class ExternalKnowledge(nn.Module):
 
     def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains):
         # Forward multiple hop mechanism
-        hidden = self.fused(hidden)
-        dh_outputs = self.fused(dh_outputs)
+        hidden = self.relu(self.fused(hidden))
+        # dh_outputs = self.fused(dh_outputs)
 
         u = [hidden.squeeze(0)]
         story_size = story.size()
@@ -521,15 +532,15 @@ class LocalMemoryDecoder(nn.Module):
         atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
         H_ = atten_weights.bmm(H)
 
-        atten_weights1 = self.attn_table(torch.cat((outputs, h.expand_as(outputs)), dim=-1))
-        atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
-        out = atten_weights1.bmm(outputs)
+        # atten_weights1 = self.attn_table(torch.cat((outputs, h.expand_as(outputs)), dim=-1))
+        # atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
+        # out = atten_weights1.bmm(outputs)
 
-        # atten_weights2 = self.attn_table(torch.cat((outputs_tf, h.expand_as(outputs_tf)), dim=-1))
-        # atten_weights2 = F.softmax(atten_weights2.transpose(1, 2), dim=-1)
-        # out_tf = atten_weights2.bmm(outputs_tf)
+        atten_weights2 = self.attn_table(torch.cat((outputs_tf, h.expand_as(outputs_tf)), dim=-1))
+        atten_weights2 = F.softmax(atten_weights2.transpose(1, 2), dim=-1)
+        out_tf = atten_weights2.bmm(outputs_tf)
 
-        context = torch.tanh(self.projector4(torch.cat((H_, h, out), dim=-1))).transpose(0, 1)
+        context = torch.tanh(self.projector4(torch.cat((H_, h, out_tf), dim=-1))).transpose(0, 1)
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
