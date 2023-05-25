@@ -525,11 +525,11 @@ class LocalMemoryDecoder(nn.Module):
         atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
         out = atten_weights1.bmm(outputs)
 
-        atten_weights2 = self.attn_table(torch.cat((outputs_tf, h.expand_as(outputs_tf)), dim=-1))
-        atten_weights2 = F.softmax(atten_weights2.transpose(1, 2), dim=-1)
-        out_tf = atten_weights2.bmm(outputs_tf)
+        # atten_weights2 = self.attn_table(torch.cat((outputs_tf, h.expand_as(outputs_tf)), dim=-1))
+        # atten_weights2 = F.softmax(atten_weights2.transpose(1, 2), dim=-1)
+        # out_tf = atten_weights2.bmm(outputs_tf)
 
-        context = torch.tanh(self.projector4(torch.cat((H_, h, out_tf), dim=-1))).transpose(0, 1)
+        context = torch.tanh(self.projector4(torch.cat((H_, h, out), dim=-1))).transpose(0, 1)
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
