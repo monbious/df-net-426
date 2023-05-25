@@ -168,9 +168,10 @@ class DFNet(nn.Module):
             conv_rand_mask = self._cuda(conv_rand_mask)
             conv_story = data['conv_arr'] * conv_rand_mask.long()
             conv_u = data['conv_u'] * conv_rand_mask[:data['conv_u'].size(0), :, :].contiguous().long()
+            conv_u_tf = data['conv_u_tf'] * conv_rand_mask.transpose(0, 1)[:, :, 0].long()
             story = data['context_arr'] * rand_mask.long()
         else:
-            story, conv_story, conv_u = data['context_arr'], data['conv_arr'], data['conv_u']
+            story, conv_story, conv_u, conv_u_tf = data['context_arr'], data['conv_arr'], data['conv_u'], data['conv_u_tf']
 
         dh_outputs, dh_hidden, label_e, label_mix_e, outputs_sketch, sket_hidden = self.encoder(conv_story, data['conv_arr_lengths'], conv_u, data['conv_u_lengths'])
 
@@ -185,6 +186,8 @@ class DFNet(nn.Module):
         for elm in data['context_arr_plain']:
             elm_temp = [word_arr[0] for word_arr in elm]
             self.copy_list.append(elm_temp)
+
+        outputs_tf = self.encoder.tfModel(conv_u_tf)
 
         outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, label_d, label_mix_d = self.decoder.forward(
             self.extKnow,
@@ -202,7 +205,8 @@ class DFNet(nn.Module):
             global_entity_type=global_entity_type,
             domains=data['label_arr'],
             kb_readout=kb_readout,
-            outputs=dh_outputs)
+            outputs=dh_outputs,
+            outputs_tf=outputs_tf)
 
         return outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, global_pointer, \
                label_e, label_d, label_mix_e, label_mix_d, None

@@ -69,6 +69,8 @@ class Dataset(data.Dataset):
         sketch_response = self.data_info['sketch_response'][index]
         sketch_response = self.preprocess(sketch_response, self.trg_word2id)
 
+        conv_u_tf = self.data_info['conv_u_tf'][index]
+        conv_u_tf = self.preprocess(conv_u_tf, self.src_word2id)[:-1]
         conv_u = self.data_info['conv_u'][index]
         conv_u = self.preprocess(conv_u, self.src_word2id, trg=False)
 
@@ -145,6 +147,7 @@ class Dataset(data.Dataset):
         sketch_response, _ = merge(item_info['sketch_response'], False)
         kb_arr, kb_arr_lengths = merge(item_info['kb_arr'], True)
 
+        conv_u_tf, _ = merge(item_info['conv_u_tf'], False)
         conv_u, conv_u_lengths = merge(item_info['conv_u'], True)
 
         max_seq_len = conv_arr.size(1)
@@ -152,11 +155,13 @@ class Dataset(data.Dataset):
         # convert to contiguous and cuda
         context_arr = _cuda(context_arr.contiguous())
         response = _cuda(response.contiguous())
+        conv_u_tf = _cuda(conv_u_tf.contiguous())
         conv_u = _cuda(conv_u.transpose(0, 1).contiguous())
         selector_index = _cuda(selector_index.contiguous())
         ptr_index = _cuda(ptr_index.contiguous())
         conv_arr = _cuda(conv_arr.transpose(0, 1).contiguous())
         sketch_response = _cuda(sketch_response.contiguous())
+
         if len(list(kb_arr.size())) > 1:
             kb_arr = _cuda(kb_arr.transpose(0, 1).contiguous())
         item_info['label_arr'] = []

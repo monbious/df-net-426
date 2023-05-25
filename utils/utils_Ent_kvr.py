@@ -66,6 +66,7 @@ def read_langs(file_name, max_line=None):
                     #                 [refer, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
                     #             conv_u.append(
                     #                 [get_ent_type(refer, global_entity), "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
+
                     # print(context_arr, '\n', conv_arr, '\n', conv_u)
                     # print('='*50)
                     ent_idx_cal, ent_idx_nav, ent_idx_wet = [], [], []
@@ -98,10 +99,12 @@ def read_langs(file_name, max_line=None):
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
 
                     kb_txt = ' '.join(kb_plains)
+                    conv_u_tf = ' '.join([w[0] for w in conv_u])
                     data_detail = {
                         'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
                         'response': r,
                         'sketch_response': sketch_response,
+                        'conv_u_tf': conv_u_tf,
                         'conv_u': list(conv_u),
                         'gold_sketch': gold_sketch,
                         'ptr_index': ptr_index + [len(context_arr)],
