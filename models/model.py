@@ -173,8 +173,10 @@ class DFNet(nn.Module):
             story, conv_story, conv_u = data['context_arr'], data['conv_arr'], data['conv_u']
 
         dh_outputs, dh_hidden, label_e, label_mix_e, outputs_sketch, sket_hidden = self.encoder(conv_story, data['conv_arr_lengths'], conv_u, data['conv_u_lengths'])
+        outputs_tf = self.encoder.tfModel(data['kb_txt'], data['conv_u_tf'])
+        tf_hidden = self.encoder.selfatten_tf(outputs_tf, [outputs_tf.size(1)])
 
-        fused_hidden = torch.cat((dh_hidden, sket_hidden), dim=-1)
+        fused_hidden = torch.cat((tf_hidden, dh_hidden, sket_hidden), dim=-1)
         fused_outputs = torch.cat((dh_outputs, outputs_sketch), dim=-1)
         global_pointer, kb_readout = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
                             fused_hidden, dh_outputs, data['domain'])
@@ -185,8 +187,6 @@ class DFNet(nn.Module):
         for elm in data['context_arr_plain']:
             elm_temp = [word_arr[0] for word_arr in elm]
             self.copy_list.append(elm_temp)
-
-        outputs_tf = self.encoder.tfModel(data['kb_txt'], data['conv_u_tf'])
 
         outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, label_d, label_mix_d = self.decoder.forward(
             self.extKnow,
