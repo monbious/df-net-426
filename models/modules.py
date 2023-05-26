@@ -516,8 +516,8 @@ class LocalMemoryDecoder(nn.Module):
             nn.Linear(2 * hidden_dim, hidden_dim),
         )
         self.projector4 = nn.Sequential(
-            # nn.Linear(3 * hidden_dim, 2 * hidden_dim),
-            # nn.Tanh(),
+            nn.Linear(3 * hidden_dim, 2 * hidden_dim),
+            nn.Tanh(),
             nn.Linear(2 * hidden_dim, hidden_dim),
         )
         self.domain_emb = nn.Embedding(len(domains), self.embedding_dim)
@@ -533,7 +533,7 @@ class LocalMemoryDecoder(nn.Module):
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
-    def get_p_vocab_atten(self, hidden, H, outputs, outputs_tf):
+    def get_p_vocab_atten(self, hidden, H, outputs, outputs_tf, kb_readout):
         h = hidden.unsqueeze(1)
         atten_weights = self.attn_table(torch.cat((H, h.expand_as(H)), dim=-1))
         atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
@@ -547,7 +547,7 @@ class LocalMemoryDecoder(nn.Module):
         # atten_weights2 = F.softmax(atten_weights2.transpose(1, 2), dim=-1)
         # out_tf = atten_weights2.bmm(outputs_tf)
 
-        context = torch.tanh(self.projector4(torch.cat((H_, h), dim=-1))).transpose(0, 1)
+        context = torch.tanh(self.projector4(torch.cat((H_, h, kb_readout.unsqueeze(1)), dim=-1))).transpose(0, 1)
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
@@ -603,7 +603,7 @@ class LocalMemoryDecoder(nn.Module):
             # global_hiddens.append(hidden)
             local_hiddens.append(hidden_local)
 
-            p_vocab, context = self.get_p_vocab_atten(query_vector[0], H, outputs, outputs_tf)
+            p_vocab, context = self.get_p_vocab_atten(query_vector[0], H, outputs, outputs_tf, kb_readout)
             # p_vocab, context = self.get_p_vocab(query_vector[0], H)
 
             all_decoder_outputs_vocab[t] = p_vocab
@@ -615,9 +615,9 @@ class LocalMemoryDecoder(nn.Module):
                 decoder_input = topvi.squeeze()
 
             # context = torch.tanh(self.projector3(torch.cat((context[0], kb_readout), dim=-1)))
-            context = self.fused_output(context, outputs_tf, kb_readout)
+            # context = self.fused_output(context, outputs_tf, kb_readout)
             # query the external konwledge using the hidden state of sketch RNN
-            prob_soft, prob_logits = extKnow(context, global_pointer)
+            prob_soft, prob_logits = extKnow(context[0], global_pointer)
             all_decoder_outputs_ptr[t] = prob_logits
 
             if get_decoded_words:
