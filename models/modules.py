@@ -362,8 +362,8 @@ class ExternalKnowledge(nn.Module):
         )
         self.relu = nn.LeakyReLU(0.1)
         self.fused = nn.Sequential(
-            nn.Linear(3 * self.embedding_dim, 2 * self.embedding_dim),
-            nn.LeakyReLU(0.1),
+            # nn.Linear(3 * self.embedding_dim, 2 * self.embedding_dim),
+            # nn.LeakyReLU(0.1),
             nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
         )
 
@@ -494,7 +494,7 @@ class LocalMemoryDecoder(nn.Module):
         self.sketch_rnn_local = AttrProxy(self, "sketch_rnn_local_")
         self.mix_attention = MLPSelfAttention(len(domains) * hidden_dim, len(domains), dropout)
         self.relu = nn.ReLU()
-        self.projector = nn.Linear(3 * hidden_dim, hidden_dim)
+        self.projector = nn.Linear(2 * hidden_dim, hidden_dim)
         self.MLP = nn.Sequential(
             nn.Linear(2 * hidden_dim, 1 * hidden_dim),
             nn.LeakyReLU(0.1),
@@ -519,7 +519,7 @@ class LocalMemoryDecoder(nn.Module):
             nn.Linear(2 * hidden_dim, hidden_dim),
         )
         self.projector4 = nn.Sequential(
-            nn.Linear(5 * hidden_dim, 2 * hidden_dim),
+            nn.Linear(3 * hidden_dim, 2 * hidden_dim),
             nn.Tanh(),
             nn.Linear(2 * hidden_dim, hidden_dim),
         )
@@ -546,11 +546,11 @@ class LocalMemoryDecoder(nn.Module):
         atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
         out = atten_weights1.bmm(outputs)
 
-        atten_weights2 = self.attn_table(torch.cat((outputs_tf, h.expand_as(outputs_tf)), dim=-1))
-        atten_weights2 = F.softmax(atten_weights2.transpose(1, 2), dim=-1)
-        out_tf = atten_weights2.bmm(outputs_tf)
+        # atten_weights2 = self.attn_table(torch.cat((outputs_tf, h.expand_as(outputs_tf)), dim=-1))
+        # atten_weights2 = F.softmax(atten_weights2.transpose(1, 2), dim=-1)
+        # out_tf = atten_weights2.bmm(outputs_tf)
 
-        context = torch.tanh(self.projector4(torch.cat((H_, h, out, out_tf, kb_readout.unsqueeze(1)), dim=-1))).transpose(0, 1)
+        context = torch.tanh(self.projector4(torch.cat((H_, h, out), dim=-1))).transpose(0, 1)
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
