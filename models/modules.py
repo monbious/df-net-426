@@ -511,8 +511,8 @@ class LocalMemoryDecoder(nn.Module):
         )
         self.projector2 = nn.Linear(2 * hidden_dim, hidden_dim)
         self.projector3 = nn.Sequential(
-            nn.Linear(3 * hidden_dim, 2 * hidden_dim),
-            nn.Tanh(),
+            # nn.Linear(3 * hidden_dim, 2 * hidden_dim),
+            # nn.Tanh(),
             nn.Linear(2 * hidden_dim, hidden_dim),
         )
         self.projector4 = nn.Sequential(
@@ -557,7 +557,7 @@ class LocalMemoryDecoder(nn.Module):
         atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
         out_h = atten_weights.bmm(outputs)
 
-        context = torch.tanh(self.projector3(torch.cat((out_h, h, read_out.unsqueeze(1)), dim=-1))).squeeze(1)
+        context = torch.tanh(self.projector3(torch.cat((out_h, h), dim=-1))).squeeze(1)
         return context
 
     def forward(self, extKnow, story_size, story_lengths, copy_list, encode_hidden, target_batches, max_target_length,
