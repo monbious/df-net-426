@@ -519,9 +519,9 @@ class LocalMemoryDecoder(nn.Module):
             nn.Linear(2 * hidden_dim, hidden_dim),
         )
         self.projector4 = nn.Sequential(
-            nn.Linear(3 * hidden_dim, 2 * hidden_dim),
-            nn.Tanh(),
-            nn.Linear(2 * hidden_dim, hidden_dim),
+            # nn.Linear(3 * hidden_dim, 2 * hidden_dim),
+            # nn.Tanh(),
+            nn.Linear(3 * hidden_dim, hidden_dim),
         )
         self.domain_emb = nn.Embedding(len(domains), self.embedding_dim)
 
@@ -542,15 +542,15 @@ class LocalMemoryDecoder(nn.Module):
         atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
         H_ = atten_weights.bmm(H)
 
-        atten_weights1 = self.attn_table(torch.cat((outputs, h.expand_as(outputs)), dim=-1))
-        atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
-        out = atten_weights1.bmm(outputs)
+        # atten_weights1 = self.attn_table(torch.cat((outputs, h.expand_as(outputs)), dim=-1))
+        # atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
+        # out = atten_weights1.bmm(outputs)
 
-        # atten_weights2 = self.attn_table(torch.cat((outputs_tf, h.expand_as(outputs_tf)), dim=-1))
-        # atten_weights2 = F.softmax(atten_weights2.transpose(1, 2), dim=-1)
-        # out_tf = atten_weights2.bmm(outputs_tf)
+        atten_weights2 = self.attn_table(torch.cat((outputs_tf, h.expand_as(outputs_tf)), dim=-1))
+        atten_weights2 = F.softmax(atten_weights2.transpose(1, 2), dim=-1)
+        out_tf = atten_weights2.bmm(outputs_tf)
 
-        context = torch.tanh(self.projector4(torch.cat((H_, h, out), dim=-1))).transpose(0, 1)
+        context = torch.tanh(self.projector4(torch.cat((H_, h, out_tf), dim=-1))).transpose(0, 1)
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
@@ -573,8 +573,10 @@ class LocalMemoryDecoder(nn.Module):
             _cuda(torch.LongTensor([SOS_token] * batch_size)))
         memory_mask_for_step = _cuda(torch.ones(story_size[0], story_size[1]))
         decoded_fine, decoded_coarse = [], []
+
         hidden = self.relu(self.projector(encode_hidden)).unsqueeze(0)
         # hidden = encode_hidden.unsqueeze(0)
+
         hidden_locals = []
         for i in range(len(self.domains)):
             hidden_locals.append(hidden.clone())
