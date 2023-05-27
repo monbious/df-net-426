@@ -188,7 +188,7 @@ class DFNet(nn.Module):
             elm_temp = [word_arr[0] for word_arr in elm]
             self.copy_list.append(elm_temp)
 
-        concat_hidden = torch.cat((sket_hidden, kb_readout), dim=-1)
+        concat_hidden = torch.cat((fused_hidden, kb_readout), dim=-1)
 
         outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, label_d, label_mix_d = self.decoder.forward(
             self.extKnow,

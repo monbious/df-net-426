@@ -494,7 +494,7 @@ class LocalMemoryDecoder(nn.Module):
         self.sketch_rnn_local = AttrProxy(self, "sketch_rnn_local_")
         self.mix_attention = MLPSelfAttention(len(domains) * hidden_dim, len(domains), dropout)
         self.relu = nn.ReLU()
-        self.projector = nn.Linear(2 * hidden_dim, hidden_dim)
+        self.projector = nn.Linear(3 * hidden_dim, hidden_dim)
         self.MLP = nn.Sequential(
             nn.Linear(2 * hidden_dim, 1 * hidden_dim),
             nn.LeakyReLU(0.1),
