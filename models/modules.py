@@ -396,12 +396,12 @@ class ExternalKnowledge(nn.Module):
         # self.m_story = []
         for hop in range(self.max_hops):
             embed_A = self.get_ck(hop, story, story_size)
+            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
 
             tf_hidden_expand = tf_hidden.expand_as(embed_A)
             concat_embed = torch.cat((embed_A, tf_hidden_expand), dim=-1)
             embed_A = self.MLP_concat_embed(concat_embed)
 
-            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
             embed_A = self.dropout_layer(embed_A)
 
             if (len(list(u[-1].size())) == 1):
@@ -411,12 +411,12 @@ class ExternalKnowledge(nn.Module):
             prob_ = self.softmax(prob_logit)
 
             embed_C = self.get_ck(hop + 1, story, story_size)
+            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
 
             tf_hidden_expand_c = tf_hidden.expand_as(embed_C)
             concat_embed_c = torch.cat((embed_C, tf_hidden_expand_c), dim=-1)
             embed_C = self.MLP_concat_embed_c(concat_embed_c)
 
-            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
             prob = prob_.unsqueeze(2).expand_as(embed_C)
             o_k = torch.sum(embed_C * prob, 1)
             u_k = u[-1] + o_k
@@ -432,12 +432,12 @@ class ExternalKnowledge(nn.Module):
         self.m_story_ent = []
         for hop in range(self.max_hops):
             embed_A = self.get_ck(hop, story, story_size)
+            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
 
             tf_hidden_expand = tf_hidden.expand_as(embed_A)
             concat_embed = torch.cat((embed_A, tf_hidden_expand), dim=-1)
             embed_A = self.MLP_concat_embed(concat_embed)
 
-            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
             embed_A = self.dropout_layer(embed_A)
 
             if (len(list(u_ent[-1].size())) == 1):
@@ -447,12 +447,11 @@ class ExternalKnowledge(nn.Module):
             prob_ = self.softmax(prob_logit)
 
             embed_C = self.get_ck(hop + 1, story, story_size)
+            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
 
             tf_hidden_expand_c = tf_hidden.expand_as(embed_C)
             concat_embed_c = torch.cat((embed_C, tf_hidden_expand_c), dim=-1)
             embed_C = self.MLP_concat_embed_c(concat_embed_c)
-
-            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
 
             prob = prob_.unsqueeze(2).expand_as(embed_C)
             o_k = torch.sum(embed_C * prob, 1)
