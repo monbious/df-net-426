@@ -388,7 +388,7 @@ class ExternalKnowledge(nn.Module):
 
     def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden):
         # Forward multiple hop mechanism
-        hidden = self.relu(self.fused(hidden))
+        # hidden = self.relu(self.fused(hidden))
         # dh_outputs = self.fused(dh_outputs)
         tf_hidden = tf_hidden.unsqueeze(1)
         u = [hidden.squeeze(0)]

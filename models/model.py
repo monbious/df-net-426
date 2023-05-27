@@ -179,7 +179,7 @@ class DFNet(nn.Module):
         fused_hidden = torch.cat((dh_hidden, sket_hidden), dim=-1)
         fused_outputs = torch.cat((dh_outputs, outputs_sketch), dim=-1)
         global_pointer, kb_readout = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
-                            fused_hidden, dh_outputs, data['domain'], tf_hidden)
+                            dh_hidden, dh_outputs, data['domain'], tf_hidden)
 
         # Get the words that can be copy from the memory
         batch_size = len(data['context_arr_lengths'])

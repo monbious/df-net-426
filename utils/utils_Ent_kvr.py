@@ -91,7 +91,7 @@ def read_langs(file_name, max_line=None):
                     #  or word_arr[0] in r.split()
                     # ent_history = list(set(ent_history))
                     ent_history = [item for item in ent_index if item in r.split()]
-                    selector_index = [1 if (word_arr[0] in ent_history) else 0
+                    selector_index = [1 if (word_arr[0] in r.split()) else 0
                                       for word_arr in context_arr] + [0]
 
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
