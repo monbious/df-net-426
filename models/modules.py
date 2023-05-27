@@ -364,7 +364,7 @@ class ExternalKnowledge(nn.Module):
         self.fused = nn.Sequential(
             # nn.Linear(3 * self.embedding_dim, 2 * self.embedding_dim),
             # nn.LeakyReLU(0.1),
-            nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
+            nn.Linear(3 * self.embedding_dim, 1 * self.embedding_dim),
         )
 
     def add_lm_embedding(self, full_memory, kb_len, conv_len, hiddens):
@@ -388,19 +388,14 @@ class ExternalKnowledge(nn.Module):
 
     def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden):
         # Forward multiple hop mechanism
-        # hidden = self.relu(self.fused(hidden))
+        hidden = self.relu(self.fused(hidden))
         # dh_outputs = self.fused(dh_outputs)
-        tf_hidden = tf_hidden.unsqueeze(1)
         u = [hidden.squeeze(0)]
         story_size = story.size()
         # self.m_story = []
         for hop in range(self.max_hops):
             embed_A = self.get_ck(hop, story, story_size)
             embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
-
-            tf_hidden_expand = tf_hidden.expand_as(embed_A)
-            concat_embed = torch.cat((embed_A, tf_hidden_expand), dim=-1)
-            embed_A = self.MLP_concat_embed(concat_embed)
 
             embed_A = self.dropout_layer(embed_A)
 
@@ -412,10 +407,6 @@ class ExternalKnowledge(nn.Module):
 
             embed_C = self.get_ck(hop + 1, story, story_size)
             embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
-
-            tf_hidden_expand_c = tf_hidden.expand_as(embed_C)
-            concat_embed_c = torch.cat((embed_C, tf_hidden_expand_c), dim=-1)
-            embed_C = self.MLP_concat_embed_c(concat_embed_c)
 
             prob = prob_.unsqueeze(2).expand_as(embed_C)
             o_k = torch.sum(embed_C * prob, 1)
@@ -434,10 +425,6 @@ class ExternalKnowledge(nn.Module):
             embed_A = self.get_ck(hop, story, story_size)
             embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
 
-            tf_hidden_expand = tf_hidden.expand_as(embed_A)
-            concat_embed = torch.cat((embed_A, tf_hidden_expand), dim=-1)
-            embed_A = self.MLP_concat_embed(concat_embed)
-
             embed_A = self.dropout_layer(embed_A)
 
             if (len(list(u_ent[-1].size())) == 1):
@@ -448,10 +435,6 @@ class ExternalKnowledge(nn.Module):
 
             embed_C = self.get_ck(hop + 1, story, story_size)
             embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
-
-            tf_hidden_expand_c = tf_hidden.expand_as(embed_C)
-            concat_embed_c = torch.cat((embed_C, tf_hidden_expand_c), dim=-1)
-            embed_C = self.MLP_concat_embed_c(concat_embed_c)
 
             prob = prob_.unsqueeze(2).expand_as(embed_C)
             o_k = torch.sum(embed_C * prob, 1)
@@ -501,10 +484,14 @@ class LocalMemoryDecoder(nn.Module):
         self.sketch_rnn_local = AttrProxy(self, "sketch_rnn_local_")
         self.mix_attention = MLPSelfAttention(len(domains) * hidden_dim, len(domains), dropout)
         self.relu = nn.ReLU()
-        self.projector = nn.Linear(3 * hidden_dim, hidden_dim)
+        self.projector = nn.Sequential(
+            nn.Linear(4 * hidden_dim, 2 * hidden_dim),
+            nn.LeakyReLU(0.1),
+            nn.Linear(2 * hidden_dim, hidden_dim),
+        )
         self.MLP = nn.Sequential(
             nn.Linear(2 * hidden_dim, 1 * hidden_dim),
-            nn.LeakyReLU(0.1),
+            # nn.LeakyReLU(0.1),
             # nn.Linear(1 * hidden_dim, hidden_dim),
             # nn.LeakyReLU(0.1),
         )
