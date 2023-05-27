@@ -62,6 +62,7 @@ class Dataset(data.Dataset):
         response = self.preprocess(response, self.trg_word2id)
         ptr_index = torch.Tensor(self.data_info['ptr_index'][index])
         selector_index = torch.Tensor(self.data_info['selector_index'][index])
+        ent_selector_index = torch.Tensor(self.data_info['ent_selector_index'][index])
         conv_arr = self.data_info['conv_arr'][index]
         conv_arr = self.preprocess(conv_arr, self.src_word2id, trg=False)
         kb_arr = self.data_info['kb_arr'][index]
@@ -144,6 +145,7 @@ class Dataset(data.Dataset):
         context_arr, context_arr_lengths = merge(item_info['context_arr'], True)
         response, response_lengths = merge(item_info['response'], False)
         selector_index, _ = merge_index(item_info['selector_index'])
+        ent_selector_index, _ = merge_index(item_info['ent_selector_index'])
         ptr_index, _ = merge(item_info['ptr_index'], False)
         conv_arr, conv_arr_lengths = merge(item_info['conv_arr'], True)
         sketch_response, _ = merge(item_info['sketch_response'], False)
@@ -162,6 +164,7 @@ class Dataset(data.Dataset):
         conv_u_tf = _cuda(conv_u_tf.contiguous())
         conv_u = _cuda(conv_u.transpose(0, 1).contiguous())
         selector_index = _cuda(selector_index.contiguous())
+        ent_selector_index = _cuda(ent_selector_index.contiguous())
         ptr_index = _cuda(ptr_index.contiguous())
         conv_arr = _cuda(conv_arr.transpose(0, 1).contiguous())
         sketch_response = _cuda(sketch_response.contiguous())

@@ -94,11 +94,15 @@ def read_langs(file_name, max_line=None):
                     selector_index = [1 if (word_arr[0] in r.split()) else 0
                                       for word_arr in context_arr] + [0]
 
+                    ent_selector_index = [1 if (word_arr[0] in ent_history) else 0
+                                          for word_arr in context_arr] + [0]
+
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
 
                     kb_txt = ' '.join(kb_plains) if len(kb_plains) > 0 else ' '.join([w[0] for w in conv_arr])
 
-                    conv_u_tf = ' '.join([w[0] for w in conv_arr]) if len(kb_plains) > 0 else ' '.join(w[0] for w in gen_u)
+                    conv_u_tf = ' '.join([w[0] for w in conv_arr]) if len(kb_plains) > 0 else ' '.join(
+                        w[0] for w in gen_u)
 
                     data_detail = {
                         'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
@@ -110,6 +114,7 @@ def read_langs(file_name, max_line=None):
                         'gold_sketch': gold_sketch,
                         'ptr_index': ptr_index + [len(context_arr)],
                         'selector_index': selector_index,
+                        'ent_selector_index': ent_selector_index,
                         'ent_index': ent_index,
                         'ent_idx_cal': list(set(ent_idx_cal)),
                         'ent_idx_nav': list(set(ent_idx_nav)),

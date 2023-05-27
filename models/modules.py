@@ -388,7 +388,7 @@ class ExternalKnowledge(nn.Module):
 
     def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden):
         # Forward multiple hop mechanism
-        hidden = self.relu(self.fused(hidden))
+        # hidden = self.relu(self.fused(hidden))
         # dh_outputs = self.fused(dh_outputs)
         u = [hidden.squeeze(0)]
         story_size = story.size()
@@ -414,11 +414,11 @@ class ExternalKnowledge(nn.Module):
             u.append(u_k)
             # self.m_story.append(embed_A)
         # self.m_story.append(embed_C)
-        gl_pointer = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden)
-        return gl_pointer, u[-1]
+        ent_pointer = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden)
+        return self.sigmoid(prob_logit), u[-1], ent_pointer
 
     def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden):
-        u_ent = [hidden.squeeze(0)]
+        u_ent = [tf_hidden.squeeze(0)]
         story_size = story.size()
         self.m_story_ent = []
         for hop in range(self.max_hops):
@@ -485,9 +485,9 @@ class LocalMemoryDecoder(nn.Module):
         self.mix_attention = MLPSelfAttention(len(domains) * hidden_dim, len(domains), dropout)
         self.relu = nn.ReLU()
         self.projector = nn.Sequential(
-            nn.Linear(4 * hidden_dim, 2 * hidden_dim),
-            nn.LeakyReLU(0.1),
-            nn.Linear(2 * hidden_dim, hidden_dim),
+            # nn.Linear(4 * hidden_dim, 2 * hidden_dim),
+            # nn.LeakyReLU(0.1),
+            nn.Linear(3 * hidden_dim, hidden_dim),
         )
         self.MLP = nn.Sequential(
             nn.Linear(2 * hidden_dim, 1 * hidden_dim),
@@ -515,7 +515,7 @@ class LocalMemoryDecoder(nn.Module):
         self.projector4 = nn.Sequential(
             # nn.Linear(3 * hidden_dim, 2 * hidden_dim),
             # nn.Tanh(),
-            nn.Linear(2 * hidden_dim, hidden_dim),
+            nn.Linear(3 * hidden_dim, hidden_dim),
         )
         self.domain_emb = nn.Embedding(len(domains), self.embedding_dim)
 
@@ -540,11 +540,11 @@ class LocalMemoryDecoder(nn.Module):
         # atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
         # out = atten_weights1.bmm(outputs)
 
-        # atten_weights2 = self.attn_table(torch.cat((outputs_tf, h.expand_as(outputs_tf)), dim=-1))
-        # atten_weights2 = F.softmax(atten_weights2.transpose(1, 2), dim=-1)
-        # out_tf = atten_weights2.bmm(outputs_tf)
+        atten_weights2 = self.attn_table(torch.cat((outputs_tf, h.expand_as(outputs_tf)), dim=-1))
+        atten_weights2 = F.softmax(atten_weights2.transpose(1, 2), dim=-1)
+        out_tf = atten_weights2.bmm(outputs_tf)
 
-        context = torch.tanh(self.projector4(torch.cat((H_, h), dim=-1))).transpose(0, 1)
+        context = torch.tanh(self.projector4(torch.cat((H_, h, out_tf), dim=-1))).transpose(0, 1)
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 

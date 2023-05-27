@@ -104,14 +104,15 @@ class DFNet(nn.Module):
         use_teacher_forcing = random.random() < args['teacher_forcing_ratio']
         max_target_length = max(data['response_lengths'])
         all_decoder_outputs_vocab, all_decoder_outputs_ptr, _, _, global_pointer, \
-        label_e, label_d, label_mix_e, label_mix_d, outputs_tf = self.encode_and_decode(
+        label_e, label_d, label_mix_e, label_mix_d, ent_pointer = self.encode_and_decode(
             data, max_target_length, use_teacher_forcing, False)
 
         # Loss calculation and backpropagation
         domains = []
         for domain in data['domain']:
             domains.append(self.domains[domain])
-        loss_g = self.criterion_bce(global_pointer, data['selector_index'])
+        loss_e = self.criterion_bce(global_pointer, data['selector_index'])
+        loss_g = self.criterion_bce(ent_pointer, data['ent_selector_index'])
         loss_v = masked_cross_entropy(
             all_decoder_outputs_vocab.transpose(0, 1).contiguous(),
             data['sketch_response'].contiguous(),
@@ -125,7 +126,7 @@ class DFNet(nn.Module):
         #     data['conv_r'].contiguous(),
         #     data['response_lengths']
         # )
-        loss = loss_g + loss_v + loss_l
+        loss = loss_g + loss_v + loss_l + loss_e
 
         golden_labels = torch.zeros_like(label_e).scatter_(1, data['label_arr'], 1)
         loss += self.criterion_label(label_e, golden_labels)
@@ -173,13 +174,12 @@ class DFNet(nn.Module):
             story, conv_story, conv_u = data['context_arr'], data['conv_arr'], data['conv_u']
 
         dh_outputs, dh_hidden, label_e, label_mix_e, outputs_sketch, sket_hidden = self.encoder(conv_story, data['conv_arr_lengths'], conv_u, data['conv_u_lengths'])
+
         outputs_tf = self.encoder.tfModel(data['kb_txt'], data['conv_u_tf'])
         tf_hidden = self.encoder.selfatten_tf(outputs_tf, [outputs_tf.size(1)])
 
-        fused_hidden = torch.cat((dh_hidden, sket_hidden, tf_hidden), dim=-1)
-        fused_outputs = torch.cat((dh_outputs, outputs_sketch), dim=-1)
-        global_pointer, kb_readout = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
-                            fused_hidden, dh_outputs, data['domain'], tf_hidden)
+        global_pointer, kb_readout, ent_pointer = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
+                            dh_hidden, dh_outputs, data['domain'], tf_hidden)
 
         # Get the words that can be copy from the memory
         batch_size = len(data['context_arr_lengths'])
@@ -188,7 +188,7 @@ class DFNet(nn.Module):
             elm_temp = [word_arr[0] for word_arr in elm]
             self.copy_list.append(elm_temp)
 
-        concat_hidden = torch.cat((fused_hidden, kb_readout), dim=-1)
+        concat_hidden = torch.cat((dh_hidden, kb_readout, sket_hidden), dim=-1)
 
         outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, label_d, label_mix_d = self.decoder.forward(
             self.extKnow,
@@ -201,7 +201,7 @@ class DFNet(nn.Module):
             batch_size,
             use_teacher_forcing,
             get_decoded_words,
-            global_pointer,
+            ent_pointer,
             H=outputs_sketch,
             global_entity_type=global_entity_type,
             domains=data['label_arr'],
@@ -210,7 +210,7 @@ class DFNet(nn.Module):
             outputs_tf=outputs_tf)
 
         return outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, global_pointer, \
-               label_e, label_d, label_mix_e, label_mix_d, None
+               label_e, label_d, label_mix_e, label_mix_d, ent_pointer
 
     def evaluate(self, dev, matric_best, output=False, early_stop=None):
         print("STARTING EVALUATION")
