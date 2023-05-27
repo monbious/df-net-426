@@ -418,7 +418,7 @@ class ExternalKnowledge(nn.Module):
         return self.sigmoid(prob_logit), u[-1], ent_pointer
 
     def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden):
-        u_ent = [tf_hidden.squeeze(0)]
+        u_ent = [hidden.squeeze(0)]
         story_size = story.size()
         self.m_story_ent = []
         for hop in range(self.max_hops):
