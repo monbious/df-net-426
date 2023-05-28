@@ -178,8 +178,9 @@ class DFNet(nn.Module):
         outputs_tf = self.encoder.tfModel(data['kb_txt'], data['conv_u_tf'])
         tf_hidden = self.encoder.selfatten_tf(outputs_tf, [outputs_tf.size(1)])
 
+        fused_hidden = torch.cat((dh_hidden, sket_hidden), dim=-1)
         global_pointer, kb_readout, ent_pointer = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
-                            dh_hidden, dh_outputs, data['domain'], tf_hidden)
+                            fused_hidden, dh_outputs, data['domain'], dh_hidden)
 
         # Get the words that can be copy from the memory
         batch_size = len(data['context_arr_lengths'])
@@ -188,7 +189,7 @@ class DFNet(nn.Module):
             elm_temp = [word_arr[0] for word_arr in elm]
             self.copy_list.append(elm_temp)
 
-        concat_hidden = torch.cat((dh_hidden, kb_readout, sket_hidden), dim=-1)
+        concat_hidden = torch.cat((fused_hidden, kb_readout), dim=-1)
 
         outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, label_d, label_mix_d = self.decoder.forward(
             self.extKnow,

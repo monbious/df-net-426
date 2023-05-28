@@ -364,7 +364,7 @@ class ExternalKnowledge(nn.Module):
         self.fused = nn.Sequential(
             # nn.Linear(3 * self.embedding_dim, 2 * self.embedding_dim),
             # nn.LeakyReLU(0.1),
-            nn.Linear(3 * self.embedding_dim, 1 * self.embedding_dim),
+            nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
         )
 
     def add_lm_embedding(self, full_memory, kb_len, conv_len, hiddens):
@@ -388,7 +388,7 @@ class ExternalKnowledge(nn.Module):
 
     def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden):
         # Forward multiple hop mechanism
-        # hidden = self.relu(self.fused(hidden))
+        hidden = self.relu(self.fused(hidden))
         # dh_outputs = self.fused(dh_outputs)
         u = [hidden.squeeze(0)]
         story_size = story.size()
@@ -418,7 +418,7 @@ class ExternalKnowledge(nn.Module):
         return self.sigmoid(prob_logit), u[-1], ent_pointer
 
     def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden):
-        u_ent = [hidden.squeeze(0)]
+        u_ent = [tf_hidden.squeeze(0)]
         story_size = story.size()
         self.m_story_ent = []
         for hop in range(self.max_hops):
@@ -536,15 +536,15 @@ class LocalMemoryDecoder(nn.Module):
         atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
         H_ = atten_weights.bmm(H)
 
-        # atten_weights1 = self.attn_table(torch.cat((outputs, h.expand_as(outputs)), dim=-1))
-        # atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
-        # out = atten_weights1.bmm(outputs)
+        atten_weights1 = self.attn_table(torch.cat((outputs, h.expand_as(outputs)), dim=-1))
+        atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
+        out = atten_weights1.bmm(outputs)
 
-        atten_weights2 = self.attn_table(torch.cat((outputs_tf, h.expand_as(outputs_tf)), dim=-1))
-        atten_weights2 = F.softmax(atten_weights2.transpose(1, 2), dim=-1)
-        out_tf = atten_weights2.bmm(outputs_tf)
+        # atten_weights2 = self.attn_table(torch.cat((outputs_tf, h.expand_as(outputs_tf)), dim=-1))
+        # atten_weights2 = F.softmax(atten_weights2.transpose(1, 2), dim=-1)
+        # out_tf = atten_weights2.bmm(outputs_tf)
 
-        context = torch.tanh(self.projector4(torch.cat((H_, h, out_tf), dim=-1))).transpose(0, 1)
+        context = torch.tanh(self.projector4(torch.cat((H_, h, out), dim=-1))).transpose(0, 1)
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
