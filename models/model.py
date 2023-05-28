@@ -175,9 +175,6 @@ class DFNet(nn.Module):
 
         dh_outputs, dh_hidden, label_e, label_mix_e, outputs_sketch, sket_hidden = self.encoder(conv_story, data['conv_arr_lengths'], conv_u, data['conv_u_lengths'])
 
-        outputs_tf = self.encoder.tfModel(data['kb_txt'], data['conv_u_tf'])
-        tf_hidden = self.encoder.selfatten_tf(outputs_tf, [outputs_tf.size(1)])
-
         fused_hidden = torch.cat((dh_hidden, sket_hidden), dim=-1)
         global_pointer, kb_readout, ent_pointer = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
                             fused_hidden, dh_outputs, data['domain'], dh_hidden)
@@ -207,8 +204,7 @@ class DFNet(nn.Module):
             global_entity_type=global_entity_type,
             domains=data['label_arr'],
             kb_readout=kb_readout,
-            outputs=dh_outputs,
-            outputs_tf=outputs_tf)
+            outputs=dh_outputs)
 
         return outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, global_pointer, \
                label_e, label_d, label_mix_e, label_mix_d, ent_pointer
