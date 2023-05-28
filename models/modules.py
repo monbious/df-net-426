@@ -323,14 +323,14 @@ class ContextEncoder(nn.Module):
             local_output, _ = local_rnn(embedded, input_lengths)
             local_outputs.append(local_output)
 
-        local_outputs, scores = self.mix_attention(torch.stack(local_outputs, dim=-1), mask)
+        local_outputs, _ = self.mix_attention(torch.stack(local_outputs, dim=-1), mask)
         outputs_ = self.MLP_H(torch.cat((F.dropout(local_outputs, self.dropout, self.training),
                                          F.dropout(global_outputs, self.dropout, self.training)), dim=-1))
 
         hidden_ = self.selfatten(outputs_, input_lengths)
-        label = self.global_classifier(global_outputs)
+        # label = self.global_classifier(global_outputs)
 
-        return outputs_, hidden_, label, scores, outputs_sketch, sket_hidden
+        return outputs_, hidden_, None, None, outputs_sketch, sket_hidden
 
 
 class ExternalKnowledge(nn.Module):
@@ -643,10 +643,10 @@ class LocalMemoryDecoder(nn.Module):
                 decoded_fine.append(temp_f)
                 decoded_coarse.append(temp_c)
 
-        label = self.global_classifier(torch.cat(global_hiddens, dim=0).transpose(0, 1))
-        scores = torch.cat(scores, dim=0).transpose(0, 1).contiguous()
+        # label = self.global_classifier(torch.cat(global_hiddens, dim=0).transpose(0, 1))
+        # scores = torch.cat(scores, dim=0).transpose(0, 1).contiguous()
         # print('all_decoder_outputs_vocab: ', all_decoder_outputs_vocab.shape)
-        return all_decoder_outputs_vocab, all_decoder_outputs_ptr, decoded_fine, decoded_coarse, label, scores
+        return all_decoder_outputs_vocab, all_decoder_outputs_ptr, decoded_fine, decoded_coarse, None, None
 
     def attend_vocab(self, seq, cond):
         scores_ = cond.matmul(seq.transpose(1, 0))

@@ -128,15 +128,15 @@ class DFNet(nn.Module):
         # )
         loss = loss_g + loss_v + loss_l + loss_e
 
-        golden_labels = torch.zeros_like(label_e).scatter_(1, data['label_arr'], 1)
-        loss += self.criterion_label(label_e, golden_labels)
-        loss += self.criterion_label(label_d, golden_labels)
+        # golden_labels = torch.zeros_like(label_e).scatter_(1, data['label_arr'], 1)
+        # loss += self.criterion_label(label_e, golden_labels)
+        # loss += self.criterion_label(label_d, golden_labels)
 
-        domains = self._cuda(torch.Tensor(domains)).long().unsqueeze(-1)
-        loss += masked_cross_entropy(label_mix_e, domains.expand(len(domains), label_mix_e.size(1)).contiguous(),
-                                     data['conv_arr_lengths'])
-        loss += masked_cross_entropy(label_mix_d, domains.expand(len(domains), label_mix_d.size(1)).contiguous(),
-                                     data['response_lengths'])
+        # domains = self._cuda(torch.Tensor(domains)).long().unsqueeze(-1)
+        # loss += masked_cross_entropy(label_mix_e, domains.expand(len(domains), label_mix_e.size(1)).contiguous(),
+        #                              data['conv_arr_lengths'])
+        # loss += masked_cross_entropy(label_mix_d, domains.expand(len(domains), label_mix_d.size(1)).contiguous(),
+        #                              data['response_lengths'])
         loss.backward()
 
         # Clip gradient norms
