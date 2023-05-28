@@ -164,10 +164,7 @@ class MLPSelfAttention(nn.Module):
         scores_ = self.scorer(inp.contiguous().view(batch_size, seq_len, -1))
         scores_ = scores_.masked_fill((mask == 0).unsqueeze(-1), -1e9)
         scores = F.softmax(scores_, dim=-1)
-        # scores = scores[:, :, :3]
-        # inp = inp[:, :, :, :3]
         context = scores.unsqueeze(-2).expand_as(inp).mul(inp).sum(-1)
-        # context = scores.unsqueeze(-2).expand_as(inp).mul(inp).max(-1)[0]
         return context, scores_
 
 
@@ -258,13 +255,14 @@ class ContextEncoder(nn.Module):
         self.n_layers = n_layers
         self.domains = domains
         self.mix_attention = MLPSelfAttention(len(domains) * 2 * self.hidden_size, len(domains), dropout)
-        self.mix_attention_c = MLPSelfAttention(len(domains) * 2 * self.hidden_size, len(domains), dropout)
+        self.mix_attention_sket = MLPSelfAttention(len(domains) * 2 * self.hidden_size, len(domains), dropout)
         self.dropout = dropout
         self.dropout_layer = nn.Dropout(dropout)
         self.embedding = nn.Embedding(input_size, args['embeddings_dim'], padding_idx=PAD_token)
         self.odim = args['embeddings_dim']
         self.global_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
         self.sketch_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
+
         self.selfatten = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
         self.selfatten_sket = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
         self.selfatten_tf = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
@@ -272,12 +270,18 @@ class ContextEncoder(nn.Module):
         for domain in domains.keys():
             setattr(self, '{}_gru'.format(domain),
                     RNN_Residual(self.odim, hidden_size, n_layers, dropout=self.dropout))
+        for domain in domains.keys():
+            setattr(self, '{}_gru_sketch'.format(domain),
+                    RNN_Residual(self.odim, hidden_size, n_layers, dropout=self.dropout))
+
         self.MLP_H = nn.Sequential(
             nn.Linear(4 * self.hidden_size, 2 * self.hidden_size),
             nn.LeakyReLU(0.1),
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
         )
         self.MLP_sket = nn.Sequential(
+            nn.Linear(4 * self.hidden_size, 2 * self.hidden_size),
+            nn.LeakyReLU(0.1),
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
         )
         self.W_hid = nn.Sequential(
@@ -307,13 +311,27 @@ class ContextEncoder(nn.Module):
         embedded_sket = self.get_embedding(sket_input_seqs)
         outputs_sket, _ = self.sketch_gru(embedded_sket, sket_input_lens)
 
-        outputs_sketch = self.MLP_sket(outputs_sket)
+        local_sket_outputs = []
+        mask = _cuda(torch.zeros((len(sket_input_lens), max(sket_input_lens))))
+        for i, length in enumerate(sket_input_lens):
+            mask[i, :length] = 1
+
+        for domain in self.domains:
+            local_rnn = getattr(self, '{}_gru_sketch'.format(domain))
+            local_output, _ = local_rnn(embedded_sket, sket_input_lens)
+            local_sket_outputs.append(local_output)
+        local_skt_outputs, _ = self.mix_attention_sket(torch.stack(local_sket_outputs, dim=-1), mask)
+
+        outputs_sketch = self.MLP_sket(torch.cat((F.dropout(local_skt_outputs, self.dropout, self.training),
+                                                  F.dropout(outputs_sket, self.dropout, self.training)), dim=-1))
         sket_hidden = self.selfatten_sket(outputs_sketch, sket_input_lens)
+
+        # bla bla
 
         embedded = self.get_embedding(input_seqs)
         global_outputs, global_hidden = self.global_gru(embedded, input_lengths)
-        local_outputs = []
 
+        local_outputs = []
         mask = _cuda(torch.zeros((len(input_lengths), input_lengths[0])))
         for i, length in enumerate(input_lengths):
             mask[i, :length] = 1
@@ -322,8 +340,8 @@ class ContextEncoder(nn.Module):
             local_rnn = getattr(self, '{}_gru'.format(domain))
             local_output, _ = local_rnn(embedded, input_lengths)
             local_outputs.append(local_output)
-
         local_outputs, _ = self.mix_attention(torch.stack(local_outputs, dim=-1), mask)
+
         outputs_ = self.MLP_H(torch.cat((F.dropout(local_outputs, self.dropout, self.training),
                                          F.dropout(global_outputs, self.dropout, self.training)), dim=-1))
 
@@ -487,7 +505,7 @@ class LocalMemoryDecoder(nn.Module):
         self.projector = nn.Sequential(
             # nn.Linear(4 * hidden_dim, 2 * hidden_dim),
             # nn.LeakyReLU(0.1),
-            nn.Linear(3 * hidden_dim, hidden_dim),
+            nn.Linear(2 * hidden_dim, hidden_dim),
         )
         self.MLP = nn.Sequential(
             nn.Linear(2 * hidden_dim, 1 * hidden_dim),
@@ -515,7 +533,7 @@ class LocalMemoryDecoder(nn.Module):
         self.projector4 = nn.Sequential(
             # nn.Linear(4 * hidden_dim, 2 * hidden_dim),
             # nn.Tanh(),
-            nn.Linear(3 * hidden_dim, hidden_dim),
+            nn.Linear(2 * hidden_dim, hidden_dim),
         )
         self.domain_emb = nn.Embedding(len(domains), self.embedding_dim)
 
@@ -534,13 +552,13 @@ class LocalMemoryDecoder(nn.Module):
         h = hidden.unsqueeze(1)
         atten_weights = self.attn_table(torch.cat((H, h.expand_as(H)), dim=-1))
         atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
-        H_ = atten_weights.bmm(H)
+        sket_hidden = atten_weights.bmm(H)
 
-        atten_weights1 = self.attn_table(torch.cat((outputs, h.expand_as(outputs)), dim=-1))
-        atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
-        out = atten_weights1.bmm(outputs)
+        # atten_weights1 = self.attn_table(torch.cat((outputs, h.expand_as(outputs)), dim=-1))
+        # atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
+        # out = atten_weights1.bmm(outputs)
 
-        context = torch.tanh(self.projector4(torch.cat((H_, h, out), dim=-1))).transpose(0, 1)
+        context = torch.tanh(self.projector4(torch.cat((sket_hidden, h), dim=-1))).transpose(0, 1)
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
@@ -559,6 +577,7 @@ class LocalMemoryDecoder(nn.Module):
         # Initialize variables for vocab and pointer
         all_decoder_outputs_vocab = _cuda(torch.zeros(max_target_length, batch_size, self.num_vocab))
         all_decoder_outputs_ptr = _cuda(torch.zeros(max_target_length, batch_size, story_size[1]))
+
         decoder_input = _cuda(self.domain_emb(domains.view(-1, ))) + self.C(
             _cuda(torch.LongTensor([SOS_token] * batch_size)))
         memory_mask_for_step = _cuda(torch.ones(story_size[0], story_size[1]))
@@ -585,7 +604,6 @@ class LocalMemoryDecoder(nn.Module):
             gl_output, hidden = self.sketch_rnn_global(embed_q, hidden)
             hidden_locals_ = []
             for domain in self.domains.values():
-                # hidden_locals_.append(self.sketch_rnn_local[domain](embed_q, hidden_locals[domain])[0])
                 hidden_locals_.append(self.sketch_rnn_local[domain](embed_q, hidden_locals[domain])[1])
             hidden_locals = hidden_locals_
             hidden_local, score = self.mix_attention(torch.stack(hidden_locals, dim=-1).transpose(0, 1),
