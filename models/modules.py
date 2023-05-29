@@ -578,8 +578,7 @@ class LocalMemoryDecoder(nn.Module):
         all_decoder_outputs_vocab = _cuda(torch.zeros(max_target_length, batch_size, self.num_vocab))
         all_decoder_outputs_ptr = _cuda(torch.zeros(max_target_length, batch_size, story_size[1]))
 
-        decoder_input = _cuda(self.domain_emb(domains.view(-1, ))) + self.C(
-            _cuda(torch.LongTensor([SOS_token] * batch_size)))
+        decoder_input = self.C(_cuda(torch.LongTensor([SOS_token] * batch_size)))
         memory_mask_for_step = _cuda(torch.ones(story_size[0], story_size[1]))
         decoded_fine, decoded_coarse = [], []
 

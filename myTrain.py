@@ -16,10 +16,10 @@ if args['fixed']:
 early_stop = args['earlyStop']
 if args['dataset'] == 'kvr':
     from utils.utils_Ent_kvr import *
-    domains = {'navigate': 0, 'weather': 1, 'schedule': 2,}
+    domains = {'navigate': 0, 'weather': 1, 'schedule': 2, 'other': 3, 'other1': 4, }
 elif args['dataset'] == 'woz':
     from utils.utils_Ent_woz import *
-    domains = {'restaurant': 0, 'attraction': 1, 'hotel': 2,}
+    domains = {'restaurant': 0, 'attraction': 1, 'hotel': 2, 'other': 3, 'other1': 4, }
 else:
     print("[ERROR] You need to provide the correct --dataset information")
 
