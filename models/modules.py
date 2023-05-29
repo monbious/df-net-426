@@ -460,13 +460,13 @@ class ExternalKnowledge(nn.Module):
             embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs_fine)
 
             prob = prob_.unsqueeze(2).expand_as(embed_C)
-            kb_embs.append(embed_C * prob)
+            kb_embs.append(self.dropout_layer(embed_C * prob))
             o_k = torch.sum(embed_C * prob, 1)
             u_k = u_ent[-1] + o_k
             u_ent.append(u_k)
             self.m_story_ent.append(embed_A)
         self.m_story_ent.append(embed_C)
-        kb_emb = self.relu(self.fused_kb(self.dropout_layer(torch.cat(kb_embs, dim=-1))))
+        kb_emb = self.relu(self.fused_kb(torch.cat(kb_embs, dim=-1)))
         return self.sigmoid(prob_logit), kb_emb
 
     def forward(self, query_vector, global_pointer):
