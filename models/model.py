@@ -173,7 +173,8 @@ class DFNet(nn.Module):
         else:
             story, conv_story, conv_u = data['context_arr'], data['conv_arr'], data['conv_u']
 
-        dh_outputs, dh_hidden, label_e, label_mix_e, outputs_sketch, sket_hidden = self.encoder(conv_story, data['conv_arr_lengths'], conv_u, data['conv_u_lengths'])
+        dh_outputs, dh_hidden, label_e, label_mix_e, outputs_sketch, sket_hidden \
+            = self.encoder(conv_story, data['conv_arr_lengths'], conv_u, data['conv_u_lengths'], data['conv_ent_mask'])
 
         fused_hidden = torch.cat((dh_hidden, sket_hidden), dim=-1)
         global_pointer, kb_readout, ent_pointer, kb_emb = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],

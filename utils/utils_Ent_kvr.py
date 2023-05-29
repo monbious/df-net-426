@@ -18,6 +18,7 @@ def read_langs(file_name, max_line=None):
     counter_set1, counter_set2 = set(), set()
     ent_history = []
     conv_u = []
+    conv_ent_mask = []
 
     with open('data/KVR/kvret_entities.json') as f:
         global_entity = json.load(f)
@@ -44,28 +45,10 @@ def read_langs(file_name, max_line=None):
                     gen_u = generate_memory(u, "$u", str(nid), task_type, global_entity, sket_u_plain)
                     context_arr += gen_u
                     conv_arr += gen_u
+                    conv_ent_mask += [1 if w in gold_ent else 2 for w in u.split()]
 
                     sket_u = generate_memory(sket_u_plain, "$u", str(nid), task_type, global_entity, sket_u_plain)
                     conv_u += sket_u
-
-                    # [word, speaker, 'turn' + str(time), 'word' + str(idx)] + ["PAD"] * (MEM_TOKEN_SIZE - 4)
-                    # for i, ent in enumerate(gold_ent):
-                    #     if ent in u:
-                    #         ref = list(set([t for tup in kb_source if (ent in tup)
-                    #                         for t in tup if t not in global_entity_keys and t != ent]))
-                    #         context_arr.append(
-                    #             [ent, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
-                    #         conv_arr.append(
-                    #             [ent, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
-                    #         conv_u.append(
-                    #             [get_ent_type(ent, global_entity), "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
-                    #         for refer in ref:
-                    #             context_arr.append(
-                    #                 [refer, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
-                    #             conv_arr.append(
-                    #                 [refer, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
-                    #             conv_u.append(
-                    #                 [get_ent_type(refer, global_entity), "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
 
                     ent_idx_cal, ent_idx_nav, ent_idx_wet = [], [], []
                     if task_type == "weather":
@@ -111,6 +94,7 @@ def read_langs(file_name, max_line=None):
                         'kb_txt': kb_txt,
                         'conv_u_tf': conv_u_tf,
                         'conv_u': list(conv_u),
+                        'conv_ent_mask': list(conv_ent_mask),
                         'gold_sketch': gold_sketch,
                         'ptr_index': ptr_index + [len(context_arr)],
                         'selector_index': selector_index,
@@ -130,6 +114,7 @@ def read_langs(file_name, max_line=None):
                     gen_r = generate_memory(r, "$s", str(nid), task_type, global_entity, sketch_response)
                     context_arr += gen_r
                     conv_arr += gen_r
+                    conv_ent_mask += [1 if w in ent_index else 2 for w in r.split()]
 
                     sket_r = generate_memory(sketch_response, "$s", str(nid), task_type, global_entity, sketch_response)
                     conv_u += sket_r
@@ -170,6 +155,7 @@ def read_langs(file_name, max_line=None):
                 counter_set2.clear()
                 ent_history = []
                 conv_u = []
+                conv_ent_mask = []
                 if (max_line and cnt_lin >= max_line):
                     break
 

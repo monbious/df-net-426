@@ -135,7 +135,7 @@ class SelfAttention(nn.Module):
         self.scorer = nn.Linear(d_hid, 1)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, inp, lens):
+    def forward(self, inp, lens, ent_mask=None):
         batch_size, seq_len, d_feat = inp.size()
         inp = self.dropout(inp)
         scores = self.scorer(inp.contiguous().view(-1, d_feat)).view(batch_size, seq_len)
@@ -143,6 +143,10 @@ class SelfAttention(nn.Module):
         for i, l in enumerate(lens):
             if l < max_len:
                 scores.data[i, l:] = -np.inf
+        if ent_mask is not None:
+            for ii in range(scores.size(0)):
+                if 1 in scores[ii]:
+                    scores[ii].masked_fill((ent_mask[ii] == 2), -np.inf)
         scores = F.softmax(scores, dim=1)
         context = scores.unsqueeze(2).expand_as(inp).mul(inp).sum(1)
         return context
@@ -307,7 +311,7 @@ class ContextEncoder(nn.Module):
         embedded = self.dropout_layer(embedded.transpose(0, 1))
         return embedded
 
-    def forward(self, input_seqs, input_lengths, sket_input_seqs, sket_input_lens):
+    def forward(self, input_seqs, input_lengths, sket_input_seqs, sket_input_lens, ent_mask):
         embedded_sket = self.get_embedding(sket_input_seqs)
         outputs_sket, _ = self.sketch_gru(embedded_sket, sket_input_lens)
 
@@ -326,7 +330,7 @@ class ContextEncoder(nn.Module):
                                                   F.dropout(outputs_sket, self.dropout, self.training)), dim=-1))
         sket_hidden = self.selfatten_sket(outputs_sketch, sket_input_lens)
 
-        # bla bla
+        # bla bla bla
 
         embedded = self.get_embedding(input_seqs)
         global_outputs, global_hidden = self.global_gru(embedded, input_lengths)
@@ -345,7 +349,7 @@ class ContextEncoder(nn.Module):
         outputs_ = self.MLP_H(torch.cat((F.dropout(local_outputs, self.dropout, self.training),
                                          F.dropout(global_outputs, self.dropout, self.training)), dim=-1))
 
-        hidden_ = self.selfatten(outputs_, input_lengths)
+        hidden_ = self.selfatten(outputs_, input_lengths, ent_mask)
         # label = self.global_classifier(global_outputs)
 
         return outputs_, hidden_, None, None, outputs_sketch, sket_hidden
