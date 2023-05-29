@@ -384,6 +384,9 @@ class ExternalKnowledge(nn.Module):
             # nn.LeakyReLU(0.1),
             nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
         )
+        self.fused_kb = nn.Sequential(
+            nn.Linear(self.max_hops * self.embedding_dim, 1 * self.embedding_dim),
+        )
 
     def add_lm_embedding(self, full_memory, kb_len, conv_len, hiddens):
         for bi in range(full_memory.size(0)):
@@ -410,7 +413,7 @@ class ExternalKnowledge(nn.Module):
         # dh_outputs = self.fused(dh_outputs)
         u = [hidden.squeeze(0)]
         story_size = story.size()
-        kb_emb = None
+        kb_embs = []
         # self.m_story = []
         for hop in range(self.max_hops):
             embed_A = self.get_ck(hop, story, story_size)
@@ -428,10 +431,7 @@ class ExternalKnowledge(nn.Module):
             embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
 
             prob = prob_.unsqueeze(2).expand_as(embed_C)
-            if kb_emb is None:
-                kb_emb = embed_C * prob
-            else:
-                kb_emb = kb_emb + embed_C * prob
+            kb_embs.append(embed_C * prob)
             o_k = torch.sum(embed_C * prob, 1)
             u_k = u[-1] + o_k
             u.append(u_k)
@@ -439,6 +439,7 @@ class ExternalKnowledge(nn.Module):
         # self.m_story.append(embed_C)
         # print(kb_emb.shape)
         ent_pointer = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden)
+        kb_emb = self.fused_kb(torch.cat(kb_embs, dim=-1))
         return self.sigmoid(prob_logit), u[-1], ent_pointer, kb_emb
 
     def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden):
