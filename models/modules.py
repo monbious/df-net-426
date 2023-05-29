@@ -439,7 +439,7 @@ class ExternalKnowledge(nn.Module):
         # self.m_story.append(embed_C)
         # print(kb_emb.shape)
         ent_pointer = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden)
-        kb_emb = self.fused_kb(torch.cat(kb_embs, dim=-1))
+        kb_emb = self.relu(self.fused_kb(torch.cat(kb_embs, dim=-1)))
         return self.sigmoid(prob_logit), u[-1], ent_pointer, kb_emb
 
     def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden):
