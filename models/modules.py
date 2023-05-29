@@ -409,11 +409,9 @@ class ExternalKnowledge(nn.Module):
 
     def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden):
         # Forward multiple hop mechanism
-        hidden = self.relu(self.fused(hidden))
-        # dh_outputs = self.fused(dh_outputs)
+        # hidden = self.relu(self.fused(hidden))
         u = [hidden.squeeze(0)]
         story_size = story.size()
-        kb_embs = []
         # self.m_story = []
         for hop in range(self.max_hops):
             embed_A = self.get_ck(hop, story, story_size)
@@ -431,20 +429,20 @@ class ExternalKnowledge(nn.Module):
             embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
 
             prob = prob_.unsqueeze(2).expand_as(embed_C)
-            kb_embs.append(embed_C * prob)
+
             o_k = torch.sum(embed_C * prob, 1)
             u_k = u[-1] + o_k
             u.append(u_k)
             # self.m_story.append(embed_A)
         # self.m_story.append(embed_C)
         # print(kb_emb.shape)
-        ent_pointer = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden)
-        kb_emb = self.relu(self.fused_kb(torch.cat(kb_embs, dim=-1)))
+        ent_pointer, kb_emb = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden)
         return self.sigmoid(prob_logit), u[-1], ent_pointer, kb_emb
 
     def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden):
         u_ent = [tf_hidden.squeeze(0)]
         story_size = story.size()
+        kb_embs = []
         self.m_story_ent = []
         for hop in range(self.max_hops):
             embed_A = self.get_ck(hop, story, story_size)
@@ -462,12 +460,14 @@ class ExternalKnowledge(nn.Module):
             embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
 
             prob = prob_.unsqueeze(2).expand_as(embed_C)
+            kb_embs.append(embed_C * prob)
             o_k = torch.sum(embed_C * prob, 1)
             u_k = u_ent[-1] + o_k
             u_ent.append(u_k)
             self.m_story_ent.append(embed_A)
         self.m_story_ent.append(embed_C)
-        return self.sigmoid(prob_logit)
+        kb_emb = self.relu(self.fused_kb(torch.cat(kb_embs, dim=-1)))
+        return self.sigmoid(prob_logit), kb_emb
 
     def forward(self, query_vector, global_pointer):
         u = [query_vector]
