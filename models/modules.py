@@ -466,7 +466,7 @@ class ExternalKnowledge(nn.Module):
             u_ent.append(u_k)
             self.m_story_ent.append(embed_A)
         self.m_story_ent.append(embed_C)
-        kb_emb = self.relu(self.fused_kb(torch.cat(kb_embs, dim=-1)))
+        kb_emb = self.relu(self.fused_kb(self.dropout_layer(torch.cat(kb_embs, dim=-1))))
         return self.sigmoid(prob_logit), kb_emb
 
     def forward(self, query_vector, global_pointer):
