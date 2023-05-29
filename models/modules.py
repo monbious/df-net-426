@@ -407,7 +407,7 @@ class ExternalKnowledge(nn.Module):
         embed = torch.sum(embed, 2).squeeze(2)
         return embed
 
-    def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden):
+    def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, hidden_fine, dh_outputs_fine):
         # Forward multiple hop mechanism
         # hidden = self.relu(self.fused(hidden))
         u = [hidden.squeeze(0)]
@@ -436,17 +436,17 @@ class ExternalKnowledge(nn.Module):
             # self.m_story.append(embed_A)
         # self.m_story.append(embed_C)
         # print(kb_emb.shape)
-        ent_pointer, kb_emb = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden)
+        ent_pointer, kb_emb = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, hidden_fine, dh_outputs_fine)
         return self.sigmoid(prob_logit), u[-1], ent_pointer, kb_emb
 
-    def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, tf_hidden):
-        u_ent = [tf_hidden.squeeze(0)]
+    def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, hidden_fine, dh_outputs_fine):
+        u_ent = [hidden_fine.squeeze(0)]
         story_size = story.size()
         kb_embs = []
         self.m_story_ent = []
         for hop in range(self.max_hops):
             embed_A = self.get_ck(hop, story, story_size)
-            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
+            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs_fine)
 
             embed_A = self.dropout_layer(embed_A)
 
@@ -457,7 +457,7 @@ class ExternalKnowledge(nn.Module):
             prob_ = self.softmax(prob_logit)
 
             embed_C = self.get_ck(hop + 1, story, story_size)
-            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
+            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs_fine)
 
             prob = prob_.unsqueeze(2).expand_as(embed_C)
             kb_embs.append(embed_C * prob)
@@ -540,7 +540,7 @@ class LocalMemoryDecoder(nn.Module):
         self.projector4 = nn.Sequential(
             # nn.Linear(4 * hidden_dim, 2 * hidden_dim),
             # nn.Tanh(),
-            nn.Linear(3 * hidden_dim, hidden_dim),
+            nn.Linear(2 * hidden_dim, hidden_dim),
         )
         self.domain_emb = nn.Embedding(len(domains), self.embedding_dim)
 
@@ -565,15 +565,15 @@ class LocalMemoryDecoder(nn.Module):
         # atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
         # out = atten_weights1.bmm(outputs)
 
-        atten_weights1 = self.attn_table_fine(torch.cat((kb_emb, h.expand_as(kb_emb)), dim=-1))
-        atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
-        kb_hiddn = atten_weights1.bmm(kb_emb)
+        # atten_weights1 = self.attn_table_fine(torch.cat((kb_emb, h.expand_as(kb_emb)), dim=-1))
+        # atten_weights1 = F.softmax(atten_weights1.transpose(1, 2), dim=-1)
+        # kb_hiddn = atten_weights1.bmm(kb_emb)
 
-        context = torch.tanh(self.projector4(torch.cat((sket_hidden, h, kb_hiddn), dim=-1))).transpose(0, 1)
+        context = torch.tanh(self.projector4(torch.cat((sket_hidden, h), dim=-1))).transpose(0, 1)
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
-    def fused_output(self, hdd, outputs, read_out):
+    def fused_output(self, hdd, outputs):
         h = hdd.transpose(0, 1)
         atten_weights = self.attn_table_fine(torch.cat((outputs, h.expand_as(outputs)), dim=-1))
         atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
@@ -638,9 +638,9 @@ class LocalMemoryDecoder(nn.Module):
                 decoder_input = topvi.squeeze()
 
             # context = torch.tanh(self.projector3(torch.cat((context[0], kb_readout), dim=-1)))
-            # context = self.fused_output(context, outputs_tf, kb_readout)
+            context = self.fused_output(context, kb_emb)
             # query the external konwledge using the hidden state of sketch RNN
-            prob_soft, prob_logits = extKnow(context[0], global_pointer)
+            prob_soft, prob_logits = extKnow(context, global_pointer)
             all_decoder_outputs_ptr[t] = prob_logits
 
             if get_decoded_words:
