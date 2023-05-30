@@ -267,6 +267,8 @@ class ContextEncoder(nn.Module):
         self.global_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
         self.sketch_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
 
+        self.sketch_resp_rnn = nn.GRU(hidden_size, hidden_size, dropout=dropout, batch_first=True)
+
         self.selfatten = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
         self.selfatten_sket = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
         self.selfatten_tf = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
@@ -313,7 +315,7 @@ class ContextEncoder(nn.Module):
 
     def forward(self, input_seqs, input_lengths, sket_input_seqs, sket_input_lens, ent_mask):
         embedded_sket = self.get_embedding(sket_input_seqs)
-        outputs_sket, _ = self.sketch_gru(embedded_sket, sket_input_lens)
+        outputs_sket, sketch_hidden = self.sketch_gru(embedded_sket, sket_input_lens)
 
         local_sket_outputs = []
         mask = _cuda(torch.zeros((len(sket_input_lens), max(sket_input_lens))))
@@ -329,6 +331,10 @@ class ContextEncoder(nn.Module):
         outputs_sketch = self.MLP_sket(torch.cat((F.dropout(local_skt_outputs, self.dropout, self.training),
                                                   F.dropout(outputs_sket, self.dropout, self.training)), dim=-1))
         sket_hidden = self.selfatten_sket(outputs_sketch, sket_input_lens)
+
+        # try to encode sketch resp again
+        sketch_hidden = self.W_hid(sketch_hidden)
+        sket_resp_outputs, resp_hidden = self.sketch_resp_rnn(outputs_sketch, sketch_hidden)
 
         # bla bla bla
 
@@ -352,7 +358,7 @@ class ContextEncoder(nn.Module):
         hidden_ = self.selfatten(outputs_, input_lengths, ent_mask)
         # label = self.global_classifier(global_outputs)
 
-        return outputs_, hidden_, None, None, outputs_sketch, sket_hidden
+        return outputs_, hidden_, None, None, sket_resp_outputs, resp_hidden
 
 
 class ExternalKnowledge(nn.Module):
@@ -616,6 +622,7 @@ class LocalMemoryDecoder(nn.Module):
             embed_q = self.dropout_layer(decoder_input)
             embed_q = embed_q.view(1, -1, self.embedding_dim)
             gl_output, hidden = self.sketch_rnn_global(embed_q, hidden)
+
             hidden_locals_ = []
             for domain in self.domains.values():
                 hidden_locals_.append(self.sketch_rnn_local[domain](embed_q, hidden_locals[domain])[1])
