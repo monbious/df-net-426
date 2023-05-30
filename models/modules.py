@@ -358,7 +358,7 @@ class ContextEncoder(nn.Module):
         hidden_ = self.selfatten(outputs_, input_lengths, ent_mask)
         # label = self.global_classifier(global_outputs)
 
-        return outputs_, hidden_, None, None, sket_resp_outputs, resp_hidden
+        return outputs_, hidden_, None, None, sket_resp_outputs, resp_hidden[0]
 
 
 class ExternalKnowledge(nn.Module):
