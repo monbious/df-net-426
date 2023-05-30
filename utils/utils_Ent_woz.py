@@ -16,6 +16,8 @@ def read_langs(file_name, max_line=None):
     conv_arr_plain = []
     max_seq_len = 0
 
+    conv_u, conv_ent_mask = [], []
+
     with open('data/MULTIWOZ2.1/global_entities.json') as f:
         global_entity = json.load(f)
         global_entity_keys = list(global_entity.keys())
@@ -33,27 +35,17 @@ def read_langs(file_name, max_line=None):
                 nid, line = line.split(' ', 1)
                 if '\t' in line:
                     u, r, gold_ent = line.split('\t')
-                    gen_u = generate_memory(u, "$u", str(nid))
-                    context_arr += gen_u
-                    conv_arr += gen_u
-                    conv_arr_plain.append(u)
-
                     # Get gold entity for each domain
                     gold_ent = ast.literal_eval(gold_ent)
 
-                    for i, ent in enumerate(gold_ent):
-                        if ent in u:
-                            ref = list(set([t for tup in kb_source if (ent in tup)
-                                            for t in tup if t not in global_entity_keys and t != ent]))
-                            context_arr.append(
-                                [ent, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
-                            conv_arr.append(
-                                [ent, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
-                            for refer in ref:
-                                context_arr.append(
-                                    [refer, "$u", 'turn' + str(nid), 'ref' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
-                                conv_arr.append(
-                                    [refer, "$u", 'turn' + str(nid), 'ref' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
+                    sket_u_plain, _ = generate_template(global_entity, u, gold_ent, kb_arr, task_type)
+                    gen_u = generate_memory(u, "$u", str(nid), task_type, kb_arr, sket_u_plain)
+                    context_arr += gen_u
+                    conv_arr += gen_u
+                    conv_ent_mask += [1 if w in gold_ent else 2 for w in u.split()]
+
+                    sket_u = generate_memory(sket_u_plain, "$u", str(nid), task_type, kb_arr, sket_u_plain)
+                    conv_u += sket_u
 
                     ent_idx_restaurant, ent_idx_attraction, ent_idx_hotel = [], [], []
                     if task_type == "restaurant":
@@ -75,40 +67,45 @@ def read_langs(file_name, max_line=None):
                         ptr_index.append(index)
 
                     # Get global pointer labels for words in system response, the 1 in the end is for the NULL token
-                    selector_index = [1 if (word_arr[0] in ent_index or word_arr[0] in r.split()) else 0 for word_arr in
-                                      context_arr] + [1]
+                    ent_history = [item for item in ent_index if item in r.split()]
+                    selector_index = [1 if (word_arr[0] in r.split() and word_arr[0] not in ent_history) else 0
+                                      for word_arr in context_arr] + [0]
+
+                    ent_selector_index = [1 if (word_arr[0] in ent_history) else 0
+                                          for word_arr in context_arr] + [1]
 
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
-                    sketch_response_tf = 'SOS ' + sketch_response
-                    conv_plain = ' '.join(conv_arr_plain)
+
                     data_detail = {
                         'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
                         'response': r,
                         'sketch_response': sketch_response,
-                        'sketch_response_tf': sketch_response_tf,
+                        'conv_u': list(conv_u),
+                        'conv_ent_mask': list(conv_ent_mask),
                         'gold_sketch': gold_sketch,
                         'ptr_index': ptr_index + [len(context_arr)],
                         'selector_index': selector_index,
+                        'ent_selector_index': ent_selector_index,
                         'ent_index': ent_index,
                         'ent_idx_restaurant': list(set(ent_idx_restaurant)),
                         'ent_idx_attraction': list(set(ent_idx_attraction)),
                         'ent_idx_hotel': list(set(ent_idx_hotel)),
                         'conv_arr': list(conv_arr),
-                        'conv_arr_plain': conv_plain,
                         'kb_arr': list(kb_arr),
                         'id': int(sample_counter),
                         'ID': int(cnt_lin),
                         'domain': task_type}
 
                     data.append(data_detail)
-                    conv_arr_plain.append(r)
 
-                    gen_r = generate_memory(r, "$s", str(nid))
+                    gen_r = generate_memory(r, "$s", str(nid), task_type, kb_arr, sketch_response)
                     context_arr += gen_r
                     conv_arr += gen_r
+                    conv_ent_mask += [1 if w in ent_index else 2 for w in r.split()]
 
-                    if max_seq_len < len(conv_plain.split()):
-                        max_seq_len = len(conv_plain.split())
+                    sket_r = generate_memory(sketch_response, "$s", str(nid), task_type, kb_arr, sketch_response)
+                    conv_u += sket_r
+
                     if max_resp_len < len(r.split()):
                         max_resp_len = len(r.split())
                     sample_counter += 1
@@ -116,7 +113,7 @@ def read_langs(file_name, max_line=None):
                     r = line.strip()
                     kb_source.append(r.split(' '))
 
-                    kb_info = generate_memory(r, "", str(nid))
+                    kb_info = generate_memory(r, "", str(nid), task_type, kb_arr)
                     context_arr = kb_info + context_arr
                     kb_arr += kb_info
             else:
@@ -124,10 +121,12 @@ def read_langs(file_name, max_line=None):
                 context_arr, conv_arr, kb_arr = [], [], []
                 kb_source = []
                 conv_arr_plain = []
+                conv_u = []
+                conv_ent_mask = []
                 if (max_line and cnt_lin >= max_line):
                     break
 
-    return data, max_resp_len, max_seq_len
+    return data, max_resp_len
 
 
 def generate_template(global_entity, sentence, sent_ent, kb_arr, domain):
@@ -154,16 +153,30 @@ def generate_template(global_entity, sentence, sent_ent, kb_arr, domain):
     sketch_response = " ".join(sketch_response)
     return sketch_response, gold_sketch
 
+def get_ent_type(word, kb_arr):
+    ent_type = ''
+    for kb_item in kb_arr:
+        if word == kb_item[0]:
+            ent_type = kb_item[1]
+            break
+    assert ent_type != ''
+    return '@' + ent_type
 
-def generate_memory(sent, speaker, time):
+def generate_memory(sent, speaker, time, task_type, kb_arr, sket_sent=None):
     sent_new = []
-    sent_token = sent.split(' ')
+    sent_token = sent.split()
     if speaker == "$u" or speaker == "$s":
+        sket_sents = sket_sent.split()
         for idx, word in enumerate(sent_token):
-            temp = [word, speaker, 'turn' + str(time), 'word' + str(idx)] + ["PAD"] * (MEM_TOKEN_SIZE - 4)
+            if '@' not in sket_sents[idx]:
+                ent_format = 'PAD'
+            else:
+                ent_format = sket_sents[idx]
+            temp = [word, speaker, 'turn' + str(time), 'word' + str(idx), ent_format] + ["PAD"] * (MEM_TOKEN_SIZE - 5)
             sent_new.append(temp)
     else:
-        sent_token = sent_token[::-1] + ["PAD"] * (MEM_TOKEN_SIZE - len(sent_token))
+        ent_format = '@' + sent_token[-2]
+        sent_token = sent_token[::-1] + [ent_format] + ["PAD"] * (MEM_TOKEN_SIZE - len(sent_token) - 1)
         sent_new.append(sent_token)
     return sent_new
 
@@ -173,11 +186,10 @@ def prepare_data_seq(batch_size=100):
     file_dev = 'data/MULTIWOZ2.1/dev.txt'
     file_test = 'data/MULTIWOZ2.1/test.txt'
 
-    pair_train, train_max_len, trn_seq_len = read_langs(file_train, max_line=None)
-    pair_dev, dev_max_len, dev_seq_len = read_langs(file_dev, max_line=None)
-    pair_test, test_max_len, test_seq_len = read_langs(file_test, max_line=None)
+    pair_train, train_max_len = read_langs(file_train, max_line=None)
+    pair_dev, dev_max_len = read_langs(file_dev, max_line=None)
+    pair_test, test_max_len = read_langs(file_test, max_line=None)
     max_resp_len = max(train_max_len, dev_max_len, test_max_len) + 1
-    max_seq_len = max(trn_seq_len, dev_seq_len, test_seq_len)
 
     lang = Lang()
 
@@ -190,10 +202,9 @@ def prepare_data_seq(batch_size=100):
     print("Read %s sentence pairs test" % len(pair_test))
     print("Vocab_size: %s " % lang.n_words)
     print("Max. length of system response: %s " % max_resp_len)
-    print("Max. length of input: %s " % max_seq_len)
     print("USE_CUDA={}".format(USE_CUDA))
 
-    return train, dev, test, [], lang, max_resp_len, max_seq_len
+    return train, dev, test, [], lang, max_resp_len
 
 
 def get_data_seq(file_name, lang, max_len, batch_size=1):
