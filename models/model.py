@@ -177,7 +177,7 @@ class DFNet(nn.Module):
             = self.encoder(conv_story, data['conv_arr_lengths'], conv_u, data['conv_u_lengths'], data['conv_ent_mask'])
 
         fused_hidden = torch.cat((dh_hidden, sket_hidden), dim=-1)
-        global_pointer, kb_readout, ent_pointer, kb_emb = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
+        global_pointer, kb_readout, ent_pointer, kb_emb, kb_output = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
                             sket_hidden, outputs_sketch, data['domain'], dh_hidden, dh_outputs)
 
         # Get the words that can be copy from the memory
@@ -206,7 +206,8 @@ class DFNet(nn.Module):
             domains=data['label_arr'],
             kb_readout=kb_readout,
             outputs=dh_outputs,
-            kb_emb=kb_emb)
+            kb_emb=kb_emb,
+            kb_output=kb_output)
 
         return outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, global_pointer, \
                label_e, label_d, label_mix_e, label_mix_d, ent_pointer
