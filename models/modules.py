@@ -333,8 +333,8 @@ class ContextEncoder(nn.Module):
         sket_hidden = self.selfatten_sket(outputs_sketch, sket_input_lens)
 
         # try to encode sketch resp again
-        sketch_hidden = self.W_hid(sketch_hidden)
-        sket_resp_outputs, resp_hidden = self.sketch_resp_rnn(outputs_sketch, sketch_hidden)
+        # sketch_hidden = self.W_hid(sketch_hidden)
+        sket_resp_outputs, resp_hidden = self.sketch_resp_rnn(outputs_sketch, sket_hidden.unsqueeze(0))
 
         # bla bla bla
 
