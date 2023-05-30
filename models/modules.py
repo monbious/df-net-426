@@ -335,6 +335,7 @@ class ContextEncoder(nn.Module):
         # try to encode sketch resp again
         # sketch_hidden = self.W_hid(sketch_hidden)
         sket_resp_outputs, resp_hidden = self.sketch_resp_rnn(outputs_sketch, sket_hidden.unsqueeze(0))
+        resp_hidden = self.selfatten_sket(sket_resp_outputs, sket_input_lens)
 
         # bla bla bla
 
@@ -358,7 +359,7 @@ class ContextEncoder(nn.Module):
         hidden_ = self.selfatten(outputs_, input_lengths, ent_mask)
         # label = self.global_classifier(global_outputs)
 
-        return outputs_, hidden_, None, None, sket_resp_outputs, resp_hidden[0]
+        return outputs_, hidden_, None, None, sket_resp_outputs, resp_hidden
 
 
 class ExternalKnowledge(nn.Module):
