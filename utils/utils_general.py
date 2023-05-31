@@ -70,6 +70,8 @@ class Dataset(data.Dataset):
         sketch_response = self.data_info['sketch_response'][index]
         sketch_response = self.preprocess(sketch_response, self.trg_word2id)
 
+        context_word_lengths = torch.Tensor(self.data_info['context_word_lengths'][index])
+        conv_word_lengths = torch.Tensor(self.data_info['conv_word_lengths'][index])
         conv_ent_mask = torch.Tensor(self.data_info['conv_ent_mask'][index])
         # kb_txt = self.data_info['kb_txt'][index]
         # kb_txt = self.preprocess(kb_txt, self.src_word2id)[:-1]
@@ -135,6 +137,13 @@ class Dataset(data.Dataset):
                 end = lengths[i]
                 padded_seqs[i, :end] = seq[:end]
             return padded_seqs, lengths
+        def merge_word_lens(sequences):
+            lengths = [len(seq) for seq in sequences]
+            padded_seqs = torch.full((len(sequences), max(lengths)), MEM_TOKEN_SIZE).long()
+            for i, seq in enumerate(sequences):
+                end = lengths[i]
+                padded_seqs[i, :end] = seq[:end]
+            return padded_seqs, lengths
 
         # sort a list by sequence length (descending order) to use pack_padded_sequence
         data.sort(key=lambda x: len(x['conv_arr']), reverse=True)
@@ -156,6 +165,8 @@ class Dataset(data.Dataset):
         # kb_txt, _ = merge(item_info['kb_txt'], False)
         # conv_u_tf, _ = merge(item_info['conv_u_tf'], False)
         conv_u, conv_u_lengths = merge(item_info['conv_u'], True)
+        context_word_lengths, _ = merge_word_lens(item_info['context_word_lengths'])
+        conv_word_lengths, _ = merge_word_lens(item_info['conv_word_lengths'])
 
         max_seq_len = conv_arr.size(1)
         label_arr = _cuda(torch.Tensor([domains[label] for label in item_info['domain']]).long().unsqueeze(-1))
@@ -171,6 +182,8 @@ class Dataset(data.Dataset):
         ptr_index = _cuda(ptr_index.contiguous())
         conv_arr = _cuda(conv_arr.transpose(0, 1).contiguous())
         sketch_response = _cuda(sketch_response.contiguous())
+        context_word_lengths = _cuda(context_word_lengths.contiguous())
+        conv_word_lengths = _cuda(conv_word_lengths.contiguous())
 
         if len(list(kb_arr.size())) > 1:
             kb_arr = _cuda(kb_arr.transpose(0, 1).contiguous())

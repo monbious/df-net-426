@@ -17,6 +17,7 @@ def read_langs(file_name, max_line=None):
     max_seq_len = 0
 
     conv_u, conv_ent_mask = [], []
+    context_word_lengths, conv_word_lengths = [], []
 
     with open('data/MULTIWOZ2.1/global_entities.json') as f:
         global_entity = json.load(f)
@@ -39,12 +40,15 @@ def read_langs(file_name, max_line=None):
                     gold_ent = ast.literal_eval(gold_ent)
 
                     sket_u_plain, _ = generate_template(global_entity, u, gold_ent, kb_arr, task_type)
-                    gen_u = generate_memory(u, "$u", str(nid), task_type, kb_arr, sket_u_plain)
+                    gen_u, word_lens = generate_memory(u, "$u", str(nid), task_type, kb_arr, sket_u_plain)
                     context_arr += gen_u
                     conv_arr += gen_u
+                    context_word_lengths += word_lens
+                    conv_word_lengths += word_lens
+
                     conv_ent_mask += [1 if w in gold_ent else 2 for w in u.split()]
 
-                    sket_u = generate_memory(sket_u_plain, "$u", str(nid), task_type, kb_arr, sket_u_plain)
+                    sket_u, _ = generate_memory(sket_u_plain, "$u", str(nid), task_type, kb_arr, sket_u_plain)
                     conv_u += sket_u
 
                     ent_idx_restaurant, ent_idx_attraction, ent_idx_hotel = [], [], []
@@ -92,18 +96,23 @@ def read_langs(file_name, max_line=None):
                         'ent_idx_hotel': list(set(ent_idx_hotel)),
                         'conv_arr': list(conv_arr),
                         'kb_arr': list(kb_arr),
+                        'context_word_lengths': list(context_word_lengths),
+                        'conv_word_lengths': list(conv_word_lengths),
                         'id': int(sample_counter),
                         'ID': int(cnt_lin),
                         'domain': task_type}
 
                     data.append(data_detail)
 
-                    gen_r = generate_memory(r, "$s", str(nid), task_type, kb_arr, sketch_response)
+                    gen_r, word_lens = generate_memory(r, "$s", str(nid), task_type, kb_arr, sketch_response)
                     context_arr += gen_r
                     conv_arr += gen_r
+                    context_word_lengths += word_lens
+                    conv_word_lengths += word_lens
+
                     conv_ent_mask += [1 if w in ent_index else 2 for w in r.split()]
 
-                    sket_r = generate_memory(sketch_response, "$s", str(nid), task_type, kb_arr, sketch_response)
+                    sket_r, _ = generate_memory(sketch_response, "$s", str(nid), task_type, kb_arr, sketch_response)
                     conv_u += sket_r
 
                     if max_resp_len < len(r.split()):
@@ -113,9 +122,10 @@ def read_langs(file_name, max_line=None):
                     r = line.strip()
                     kb_source.append(r.split(' '))
 
-                    kb_info = generate_memory(r, "", str(nid), task_type, kb_arr)
+                    kb_info, word_lens = generate_memory(r, "", str(nid), task_type, kb_arr)
                     context_arr = kb_info + context_arr
                     kb_arr += kb_info
+                    context_word_lengths = word_lens + context_word_lengths
             else:
                 cnt_lin += 1
                 context_arr, conv_arr, kb_arr = [], [], []
@@ -123,6 +133,7 @@ def read_langs(file_name, max_line=None):
                 conv_arr_plain = []
                 conv_u = []
                 conv_ent_mask = []
+                context_word_lengths, conv_word_lengths = [], []
                 if (max_line and cnt_lin >= max_line):
                     break
 
@@ -165,20 +176,26 @@ def get_ent_type(word, kb_arr):
 def generate_memory(sent, speaker, time, task_type, kb_arr, sket_sent=None):
     sent_new = []
     sent_token = sent.split()
+    word_lengths = []
     if speaker == "$u" or speaker == "$s":
         sket_sents = sket_sent.split()
         for idx, word in enumerate(sent_token):
+            word_len = MEM_TOKEN_SIZE
             if '@' not in sket_sents[idx]:
                 ent_format = 'PAD'
+                word_len = 4
             else:
                 ent_format = sket_sents[idx]
+                word_len = 5
             temp = [word, speaker, 'turn' + str(time), 'word' + str(idx), ent_format] + ["PAD"] * (MEM_TOKEN_SIZE - 5)
             sent_new.append(temp)
+            word_lengths.append(word_len)
     else:
         ent_format = '@' + sent_token[-2]
         sent_token = sent_token[::-1] + [ent_format] + ["PAD"] * (MEM_TOKEN_SIZE - len(sent_token) - 1)
         sent_new.append(sent_token)
-    return sent_new
+        word_lengths.append(len(sent_token) + 1)
+    return sent_new, word_lengths
 
 
 def prepare_data_seq(batch_size=100):
