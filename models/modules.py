@@ -311,13 +311,14 @@ class ContextEncoder(nn.Module):
         embedded = embedded.view(input_seqs.size() + (embedded.size(-1),))
         # embedded = torch.sum(embedded, 2).squeeze(2)
         embedded = embedded.transpose(0, 1)
+        select_emb = torch.zeros_like(embedded)
         for bat in range(word_lens.size(0)):
             for l in range(word_lens.size(1)):
                 end = word_lens[bat][l]
-                embedded[bat, l, end:, :] = 0
-        embedded = torch.sum(embedded, 2)
-        embedded = self.dropout_layer(embedded)
-        return embedded
+                select_emb[bat, l, :end, :] = embedded[bat, l, :end, :]
+        select_emb = torch.sum(select_emb, 2)
+        select_emb = self.dropout_layer(select_emb)
+        return select_emb
 
     def forward(self, input_seqs, input_lengths, sket_input_seqs, sket_input_lens, ent_mask, conv_word_lens):
         embedded_sket = self.get_embedding(sket_input_seqs, conv_word_lens)
@@ -420,12 +421,13 @@ class ExternalKnowledge(nn.Module):
     def get_ck(self, hop, story, story_size, ctx_word_lens):
         embed = self.C[hop](story.contiguous().view(story_size[0], -1))
         embed = embed.view(story_size + (embed.size(-1),))
+        select_emb = torch.zeros_like(embed)
         for bat in range(ctx_word_lens.size(0)):
             for l in range(ctx_word_lens.size(1)):
                 end = ctx_word_lens[bat][l]
-                embed[bat, l, end:, :] = 0
-        embed = torch.sum(embed, 2)
-        return embed
+                select_emb[bat, l, :end, :] = embed[bat, l, :end, :]
+        select_emb = torch.sum(select_emb, 2)
+        return select_emb
 
     def get_ck_local(self, hop, story, story_size, domains):
         embed = _cuda(torch.zeros((story_size + (self.embedding_dim,))))
