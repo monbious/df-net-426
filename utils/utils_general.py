@@ -139,10 +139,11 @@ class Dataset(data.Dataset):
             return padded_seqs, lengths
         def merge_word_lens(sequences):
             lengths = [len(seq) for seq in sequences]
-            padded_seqs = torch.full((len(sequences), max(lengths)), MEM_TOKEN_SIZE).long()
+            padded_seqs = torch.zeros(len(sequences), max(lengths), MEM_TOKEN_SIZE).long()
             for i, seq in enumerate(sequences):
                 end = lengths[i]
-                padded_seqs[i, :end] = seq[:end]
+                if len(seq) != 0:
+                    padded_seqs[i, :end, :] = seq[:end]
             return padded_seqs, lengths
 
         # sort a list by sequence length (descending order) to use pack_padded_sequence

@@ -1,18 +1,26 @@
 import torch
 
-# 创建一个形状为(3, 4)的张量
-x = torch.tensor([[1, 2, 3, 4],
-                  [5, 6, 7, 8],
-                  [9, 10, 11, 12]])
+# 创建示例张量
+tensor = torch.tensor([[1, 2, 3],
+                       [4, 5, 6],
+                       [7, 8, 9]])
 
-# 创建一个形状相同的掩码张量
-mask = torch.tensor([[True],
-                     [False],
-                     [True]])
+# 定义维度大小
+dim1 = 3
+dim2 = 3
 
-# 使用masked_fill方法进行填充
-filled_x = x.masked_fill(mask, 0)
+# 创建多维索引
+indices = torch.meshgrid(
+    torch.arange(dim1),
+    torch.arange(dim2)
+)
+print(indices)
 
-print(filled_x)
+# 将多维索引拼接为一个张量
+tensor_indices = torch.stack(indices, dim=-1)
+print(tensor_indices)
 
-print(torch.softmax(torch.full((1, 3), -1e9), dim=-1))
+# 根据索引获取值
+values = tensor[tensor_indices[:, :, 0], tensor_indices[:, :, 1]]
+
+print(values)

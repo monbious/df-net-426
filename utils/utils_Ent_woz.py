@@ -96,7 +96,7 @@ def read_langs(file_name, max_line=None):
                         'ent_idx_hotel': list(set(ent_idx_hotel)),
                         'conv_arr': list(conv_arr),
                         'kb_arr': list(kb_arr),
-                        'context_word_lengths': list(context_word_lengths),
+                        'context_word_lengths': list(context_word_lengths + [[1] * MEM_TOKEN_SIZE]),
                         'conv_word_lengths': list(conv_word_lengths),
                         'id': int(sample_counter),
                         'ID': int(cnt_lin),
@@ -180,21 +180,20 @@ def generate_memory(sent, speaker, time, task_type, kb_arr, sket_sent=None):
     if speaker == "$u" or speaker == "$s":
         sket_sents = sket_sent.split()
         for idx, word in enumerate(sent_token):
-            word_len = MEM_TOKEN_SIZE
             if '@' not in sket_sents[idx]:
                 ent_format = 'PAD'
-                word_len = 4
             else:
                 ent_format = sket_sents[idx]
-                word_len = 5
             temp = [word, speaker, 'turn' + str(time), 'word' + str(idx), ent_format] + ["PAD"] * (MEM_TOKEN_SIZE - 5)
             sent_new.append(temp)
+            word_len = [1 if w != "PAD" else 2 for w in temp]
             word_lengths.append(word_len)
     else:
         ent_format = '@' + sent_token[-2]
         sent_token = sent_token[::-1] + [ent_format] + ["PAD"] * (MEM_TOKEN_SIZE - len(sent_token) - 1)
         sent_new.append(sent_token)
-        word_lengths.append(len(sent_token) + 1)
+        word_len = [1 if w != "PAD" else 2 for w in sent_token]
+        word_lengths.append(word_len)
     return sent_new, word_lengths
 
 
