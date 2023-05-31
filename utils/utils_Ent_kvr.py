@@ -19,6 +19,7 @@ def read_langs(file_name, max_line=None):
     ent_history = []
     conv_u = []
     conv_ent_mask = []
+    context_word_lengths, conv_word_lengths = [], []
 
     with open('data/KVR/kvret_entities.json') as f:
         global_entity = json.load(f)
@@ -42,12 +43,15 @@ def read_langs(file_name, max_line=None):
                     gold_ent = ast.literal_eval(gold_ent)
 
                     sket_u_plain, _ = generate_template(global_entity, u, gold_ent, kb_arr, task_type)
-                    gen_u = generate_memory(u, "$u", str(nid), task_type, global_entity, sket_u_plain)
+                    gen_u, word_lens = generate_memory(u, "$u", str(nid), task_type, global_entity, sket_u_plain)
                     context_arr += gen_u
                     conv_arr += gen_u
+                    context_word_lengths += word_lens
+                    conv_word_lengths += word_lens
+
                     conv_ent_mask += [1 if w in gold_ent else 2 for w in u.split()]
 
-                    sket_u = generate_memory(sket_u_plain, "$u", str(nid), task_type, global_entity, sket_u_plain)
+                    sket_u, _ = generate_memory(sket_u_plain, "$u", str(nid), task_type, global_entity, sket_u_plain)
                     conv_u += sket_u
 
                     ent_idx_cal, ent_idx_nav, ent_idx_wet = [], [], []
@@ -105,18 +109,23 @@ def read_langs(file_name, max_line=None):
                         'ent_idx_wet': list(set(ent_idx_wet)),
                         'conv_arr': list(conv_arr),
                         'kb_arr': list(kb_arr),
+                        'context_word_lengths': list(context_word_lengths + [[1] * MEM_TOKEN_SIZE]),
+                        'conv_word_lengths': list(conv_word_lengths),
                         'id': int(sample_counter),
                         'ID': int(cnt_lin),
                         'domain': task_type}
 
                     data.append(data_detail)
 
-                    gen_r = generate_memory(r, "$s", str(nid), task_type, global_entity, sketch_response)
+                    gen_r, word_lens = generate_memory(r, "$s", str(nid), task_type, global_entity, sketch_response)
                     context_arr += gen_r
                     conv_arr += gen_r
+                    context_word_lengths += word_lens
+                    conv_word_lengths += word_lens
+
                     conv_ent_mask += [1 if w in ent_index else 2 for w in r.split()]
 
-                    sket_r = generate_memory(sketch_response, "$s", str(nid), task_type, global_entity, sketch_response)
+                    sket_r, _ = generate_memory(sketch_response, "$s", str(nid), task_type, global_entity, sketch_response)
                     conv_u += sket_r
 
                     if max_resp_len < len(r.split()):
@@ -142,10 +151,10 @@ def read_langs(file_name, max_line=None):
                             else:
                                 kb_plains += r_split[2:]
 
-                    kb_info = generate_memory(r, "", str(nid), task_type, global_entity)
+                    kb_info, word_lens = generate_memory(r, "", str(nid), task_type, global_entity)
                     context_arr = kb_info + context_arr
                     kb_arr += kb_info
-
+                    context_word_lengths = word_lens + context_word_lengths
             else:
                 cnt_lin += 1
                 context_arr, conv_arr, kb_arr = [], [], []
@@ -156,6 +165,7 @@ def read_langs(file_name, max_line=None):
                 ent_history = []
                 conv_u = []
                 conv_ent_mask = []
+                context_word_lengths, conv_word_lengths = [], []
                 if (max_line and cnt_lin >= max_line):
                     break
 
@@ -193,8 +203,6 @@ def generate_template(global_entity, sentence, sent_ent, kb_arr, domain):
                             if word in poi_list or word.replace('_', ' ') in poi_list:
                                 ent_type = key
                                 break
-                # print(word)
-                # print(ent_type)
                 sketch_response.append('@' + ent_type)
                 gold_sketch.append('@' + ent_type)
     sketch_response = " ".join(sketch_response)
@@ -220,6 +228,7 @@ def get_ent_type(word, global_entity):
 def generate_memory(sent, speaker, time, task_type, global_entity, sket_sent=None):
     sent_new = []
     sent_token = sent.split(' ')
+    word_lengths = []
     if speaker == "$u" or speaker == "$s":
         sket_sents = sket_sent.split()
         for idx, word in enumerate(sent_token):
@@ -229,6 +238,8 @@ def generate_memory(sent, speaker, time, task_type, global_entity, sket_sent=Non
                 ent_format = sket_sents[idx]
             temp = [word, speaker, 'turn' + str(time), 'word' + str(idx), ent_format] + ["PAD"] * (MEM_TOKEN_SIZE - 5)
             sent_new.append(temp)
+            word_len = [1 if w != "PAD" else 2 for w in temp]
+            word_lengths.append(word_len)
     else:
         ent_format = None
         if task_type != 'weather':
@@ -237,7 +248,9 @@ def generate_memory(sent, speaker, time, task_type, global_entity, sket_sent=Non
             ent_format = get_ent_type(sent_token[-1], global_entity)
         sent_token = sent_token[::-1] + [ent_format] + ["PAD"] * (MEM_TOKEN_SIZE - len(sent_token) - 1)
         sent_new.append(sent_token)
-    return sent_new
+        word_len = [1 if w != "PAD" else 2 for w in sent_token]
+        word_lengths.append(word_len)
+    return sent_new, word_lengths
 
 
 def prepare_data_seq(batch_size=100):
