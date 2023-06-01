@@ -181,7 +181,6 @@ class DFNet(nn.Module):
             data['conv_ent_mask'],
             data['conv_word_lengths'])
 
-        fused_hidden = torch.cat((dh_hidden, sket_hidden), dim=-1)
         global_pointer, kb_readout, ent_pointer, kb_emb, kb_output = self.extKnow.load_memory(
             story,
             data['kb_arr_lengths'],

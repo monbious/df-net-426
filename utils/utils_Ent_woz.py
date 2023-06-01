@@ -12,9 +12,6 @@ def read_langs(file_name, max_line=None):
     print(("Reading lines from {}".format(file_name)))
     data, context_arr, conv_arr, kb_arr = [], [], [], []
     max_resp_len = 0
-    kb_source = []
-    conv_arr_plain = []
-    max_seq_len = 0
 
     conv_u, conv_ent_mask = [], []
     context_word_lengths, conv_word_lengths = [], []
@@ -43,6 +40,7 @@ def read_langs(file_name, max_line=None):
                     gen_u, word_lens = generate_memory(u, "$u", str(nid), task_type, kb_arr, sket_u_plain)
                     context_arr += gen_u
                     conv_arr += gen_u
+
                     context_word_lengths += word_lens
                     conv_word_lengths += word_lens
 
@@ -107,6 +105,7 @@ def read_langs(file_name, max_line=None):
                     gen_r, word_lens = generate_memory(r, "$s", str(nid), task_type, kb_arr, sketch_response)
                     context_arr += gen_r
                     conv_arr += gen_r
+
                     context_word_lengths += word_lens
                     conv_word_lengths += word_lens
 
@@ -120,7 +119,6 @@ def read_langs(file_name, max_line=None):
                     sample_counter += 1
                 else:
                     r = line.strip()
-                    kb_source.append(r.split(' '))
 
                     kb_info, word_lens = generate_memory(r, "", str(nid), task_type, kb_arr)
                     context_arr = kb_info + context_arr
@@ -129,8 +127,6 @@ def read_langs(file_name, max_line=None):
             else:
                 cnt_lin += 1
                 context_arr, conv_arr, kb_arr = [], [], []
-                kb_source = []
-                conv_arr_plain = []
                 conv_u = []
                 conv_ent_mask = []
                 context_word_lengths, conv_word_lengths = [], []

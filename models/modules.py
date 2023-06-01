@@ -271,7 +271,6 @@ class ContextEncoder(nn.Module):
 
         self.selfatten = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
         self.selfatten_sket = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
-        self.selfatten_tf = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
 
         for domain in domains.keys():
             setattr(self, '{}_gru'.format(domain),
@@ -442,7 +441,7 @@ class ExternalKnowledge(nn.Module):
             embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
             embed_A = self.dropout_layer(embed_A)
 
-            if (len(list(u[-1].size())) == 1):
+            if len(list(u[-1].size())) == 1:
                 u[-1] = u[-1].unsqueeze(0)
             u_temp = u[-1].unsqueeze(1).expand_as(embed_A)
             prob_logit = torch.sum(embed_A * u_temp, 2)
@@ -474,10 +473,9 @@ class ExternalKnowledge(nn.Module):
         for hop in range(self.max_hops):
             embed_A = self.get_ck(hop, story, story_size, ctx_word_lens)
             embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs_fine)
-
             embed_A = self.dropout_layer(embed_A)
 
-            if (len(list(u_ent[-1].size())) == 1):
+            if len(list(u_ent[-1].size())) == 1:
                 u_ent[-1] = u_ent[-1].unsqueeze(0)
             u_temp = u_ent[-1].unsqueeze(1).expand_as(embed_A)
             prob_logit = torch.sum(embed_A * u_temp, 2)

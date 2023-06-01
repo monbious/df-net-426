@@ -13,10 +13,6 @@ def read_langs(file_name, max_line=None):
     print(("Reading lines from {}".format(file_name)))
     data, context_arr, conv_arr, kb_arr = [], [], [], []
     max_resp_len = 0
-    kb_source = []
-    kb_plains = []
-    counter_set1, counter_set2 = set(), set()
-    ent_history = []
     conv_u = []
     conv_ent_mask = []
     context_word_lengths, conv_word_lengths = [], []
@@ -46,6 +42,7 @@ def read_langs(file_name, max_line=None):
                     gen_u, word_lens = generate_memory(u, "$u", str(nid), task_type, global_entity, sket_u_plain)
                     context_arr += gen_u
                     conv_arr += gen_u
+
                     context_word_lengths += word_lens
                     conv_word_lengths += word_lens
 
@@ -62,7 +59,6 @@ def read_langs(file_name, max_line=None):
                     elif task_type == "navigate":
                         ent_idx_nav = gold_ent
                     ent_index = list(set(ent_idx_cal + ent_idx_nav + ent_idx_wet))
-                    ent_history += ent_index
 
                     # Get local pointer position for each word in system response
                     ptr_index = []
@@ -86,17 +82,10 @@ def read_langs(file_name, max_line=None):
 
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
 
-                    kb_txt = ' '.join(kb_plains) if len(kb_plains) > 0 else ' '.join([w[0] for w in conv_arr])
-
-                    conv_u_tf = ' '.join([w[0] for w in conv_arr]) if len(kb_plains) > 0 else ' '.join(
-                        w[0] for w in gen_u)
-
                     data_detail = {
                         'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
                         'response': r,
                         'sketch_response': sketch_response,
-                        'kb_txt': kb_txt,
-                        'conv_u_tf': conv_u_tf,
                         'conv_u': list(conv_u),
                         'conv_ent_mask': list(conv_ent_mask),
                         'gold_sketch': gold_sketch,
@@ -133,23 +122,6 @@ def read_langs(file_name, max_line=None):
                     sample_counter += 1
                 else:
                     r = line.strip()
-                    r_split = r.split(' ')
-                    kb_source.append(r_split)
-
-                    if len(r_split) < 5:
-                        if r_split[0] not in counter_set1:
-                            counter_set2.clear()
-                            if len(kb_plains) > 0:
-                                kb_plains.append("SEP")
-                            kb_plains += r_split
-                            counter_set1.add(r_split[0])
-                            counter_set2.add(r_split[1])
-                        else:
-                            if r_split[1] not in counter_set2:
-                                kb_plains += r_split[1:]
-                                counter_set2.add(r_split[1])
-                            else:
-                                kb_plains += r_split[2:]
 
                     kb_info, word_lens = generate_memory(r, "", str(nid), task_type, global_entity)
                     context_arr = kb_info + context_arr
@@ -158,15 +130,10 @@ def read_langs(file_name, max_line=None):
             else:
                 cnt_lin += 1
                 context_arr, conv_arr, kb_arr = [], [], []
-                kb_source = []
-                kb_plains = []
-                counter_set1.clear()
-                counter_set2.clear()
-                ent_history = []
                 conv_u = []
                 conv_ent_mask = []
                 context_word_lengths, conv_word_lengths = [], []
-                if (max_line and cnt_lin >= max_line):
+                if max_line and cnt_lin >= max_line:
                     break
 
     return data, max_resp_len
