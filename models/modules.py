@@ -143,10 +143,10 @@ class SelfAttention(nn.Module):
         for i, l in enumerate(lens):
             if l < max_len:
                 scores.data[i, l:] = -np.inf
-        if ent_mask is not None:
-            for ii in range(scores.size(0)):
-                if 1 in scores[ii]:
-                    scores[ii].masked_fill((ent_mask[ii] == 2), -np.inf)
+        # if ent_mask is not None:
+        #     for ii in range(scores.size(0)):
+        #         if 1 in scores[ii]:
+        #             scores[ii].masked_fill((ent_mask[ii] == 2), -np.inf)
         scores = F.softmax(scores, dim=1)
         context = scores.unsqueeze(2).expand_as(inp).mul(inp).sum(1)
         return context
