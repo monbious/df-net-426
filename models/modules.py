@@ -563,6 +563,11 @@ class LocalMemoryDecoder(nn.Module):
             nn.Tanh(),
             nn.Linear(hidden_dim, 1)
         )
+        self.attn_kb_ent = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim, bias=False),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, 1)
+        )
         self.projector2 = nn.Linear(2 * hidden_dim, hidden_dim)
         self.projector3 = nn.Sequential(
             # nn.Linear(3 * hidden_dim, 2 * hidden_dim),
@@ -607,7 +612,7 @@ class LocalMemoryDecoder(nn.Module):
 
     def fused_output(self, hdd, outputs, kb_readout):
         h = hdd.transpose(0, 1)
-        atten_weights = self.attn_table_fine(torch.cat((outputs, h.expand_as(outputs)), dim=-1))
+        atten_weights = self.attn_kb_ent(torch.cat((outputs, h.expand_as(outputs)), dim=-1))
         atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
         out_h = atten_weights.bmm(outputs)
 
