@@ -181,7 +181,7 @@ class DFNet(nn.Module):
             data['conv_ent_mask'],
             data['conv_word_lengths'])
 
-        global_pointer, kb_readout, ent_pointer, kb_emb, kb_output = self.extKnow.load_memory(
+        global_pointer, kb_readout, ent_pointer, kb_emb, kb_output, kb_ent_hdd = self.extKnow.load_memory(
             story,
             data['kb_arr_lengths'],
             data['conv_arr_lengths'],
@@ -216,7 +216,7 @@ class DFNet(nn.Module):
             H=outputs_sketch,
             global_entity_type=global_entity_type,
             domains=data['label_arr'],
-            kb_readout=kb_readout,
+            kb_readout=kb_ent_hdd,
             outputs=dh_outputs,
             kb_emb=kb_emb,
             kb_output=kb_output)

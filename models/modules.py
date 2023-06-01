@@ -402,10 +402,14 @@ class ExternalKnowledge(nn.Module):
             nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
         )
         self.fused_kb = nn.Sequential(
-            nn.Linear(self.max_hops * self.embedding_dim, 1 * self.embedding_dim),
+            nn.Linear(self.max_hops * self.embedding_dim, 2 * self.embedding_dim),
+            nn.LeakyReLU(0.1),
+            nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
         )
         self.fused_kb_output = nn.Sequential(
-            nn.Linear(self.max_hops * self.embedding_dim, 1 * self.embedding_dim),
+            nn.Linear(self.max_hops * self.embedding_dim, 2 * self.embedding_dim),
+            nn.LeakyReLU(0.1),
+            nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
         )
 
     def add_lm_embedding(self, full_memory, kb_len, conv_len, hiddens):
@@ -462,8 +466,8 @@ class ExternalKnowledge(nn.Module):
         # print(kb_emb.shape)
         kb_output = self.relu(self.fused_kb_output(torch.cat(kb_outputs, dim=-1)))
 
-        ent_pointer, kb_emb = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, hidden_fine, dh_outputs_fine, ctx_word_lens)
-        return self.sigmoid(prob_logit), u[-1], ent_pointer, kb_emb, kb_output
+        ent_pointer, kb_emb, kb_ent_hdd = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, hidden_fine, dh_outputs_fine, ctx_word_lens)
+        return self.sigmoid(prob_logit), u[-1], ent_pointer, kb_emb, kb_output, kb_ent_hdd
 
     def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, hidden_fine, dh_outputs_fine, ctx_word_lens):
         u_ent = [hidden_fine.squeeze(0)]
@@ -495,7 +499,7 @@ class ExternalKnowledge(nn.Module):
         self.m_story_ent.append(embed_C)
 
         kb_emb = self.relu(self.fused_kb(torch.cat(kb_embs, dim=-1)))
-        return self.sigmoid(prob_logit), kb_emb
+        return self.sigmoid(prob_logit), kb_emb, u_ent[-1]
 
     def forward(self, query_vector, global_pointer):
         u = [query_vector]
@@ -563,7 +567,7 @@ class LocalMemoryDecoder(nn.Module):
         self.projector3 = nn.Sequential(
             # nn.Linear(3 * hidden_dim, 2 * hidden_dim),
             # nn.Tanh(),
-            nn.Linear(2 * hidden_dim, hidden_dim),
+            nn.Linear(3 * hidden_dim, hidden_dim),
         )
         self.projector4 = nn.Sequential(
             # nn.Linear(4 * hidden_dim, 2 * hidden_dim),
@@ -583,7 +587,7 @@ class LocalMemoryDecoder(nn.Module):
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
-    def get_p_vocab_atten(self, hidden, H, outputs, kb_readout, kb_output):
+    def get_p_vocab_atten(self, hidden, H, outputs, kb_output):
         h = hidden.unsqueeze(1)
         atten_weights = self.attn_table(torch.cat((H, h.expand_as(H)), dim=-1))
         atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
@@ -601,13 +605,13 @@ class LocalMemoryDecoder(nn.Module):
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
 
-    def fused_output(self, hdd, outputs):
+    def fused_output(self, hdd, outputs, kb_readout):
         h = hdd.transpose(0, 1)
         atten_weights = self.attn_table_fine(torch.cat((outputs, h.expand_as(outputs)), dim=-1))
         atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
         out_h = atten_weights.bmm(outputs)
 
-        context = torch.tanh(self.projector3(torch.cat((out_h, h), dim=-1))).squeeze(1)
+        context = torch.tanh(self.projector3(torch.cat((out_h, h, kb_readout.unsqueeze(1)), dim=-1))).squeeze(1)
         return context
 
     def forward(self, extKnow, story_size, story_lengths, copy_list, encode_hidden, target_batches, max_target_length,
@@ -655,7 +659,7 @@ class LocalMemoryDecoder(nn.Module):
             # global_hiddens.append(hidden)
             local_hiddens.append(hidden_local)
 
-            p_vocab, context = self.get_p_vocab_atten(query_vector[0], H, outputs, kb_readout, kb_output)
+            p_vocab, context = self.get_p_vocab_atten(query_vector[0], H, outputs, kb_output)
             # p_vocab, context = self.get_p_vocab(query_vector[0], H)
 
             all_decoder_outputs_vocab[t] = p_vocab
@@ -667,7 +671,7 @@ class LocalMemoryDecoder(nn.Module):
                 decoder_input = topvi.squeeze()
 
             # context = torch.tanh(self.projector3(torch.cat((context[0], kb_readout), dim=-1)))
-            context = self.fused_output(context, kb_emb)
+            context = self.fused_output(context, kb_emb, kb_readout)
             # query the external konwledge using the hidden state of sketch RNN
             prob_soft, prob_logits = extKnow(context, global_pointer)
             all_decoder_outputs_ptr[t] = prob_logits
