@@ -402,14 +402,14 @@ class ExternalKnowledge(nn.Module):
             nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
         )
         self.fused_kb = nn.Sequential(
-            nn.Linear(self.max_hops * self.embedding_dim, 2 * self.embedding_dim),
-            nn.LeakyReLU(0.1),
-            nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
+            nn.Linear(self.max_hops * self.embedding_dim, 1 * self.embedding_dim),
+            # nn.LeakyReLU(0.1),
+            # nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
         )
         self.fused_kb_output = nn.Sequential(
-            nn.Linear(self.max_hops * self.embedding_dim, 2 * self.embedding_dim),
-            nn.LeakyReLU(0.1),
-            nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
+            nn.Linear(self.max_hops * self.embedding_dim, 1 * self.embedding_dim),
+            # nn.LeakyReLU(0.1),
+            # nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
         )
 
     def add_lm_embedding(self, full_memory, kb_len, conv_len, hiddens):
