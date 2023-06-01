@@ -51,7 +51,7 @@ class DFNet(nn.Module):
         self.extKnow_optimizer = optim.Adam(self.extKnow.parameters(), lr=lr)
         self.decoder_optimizer = optim.Adam(self.decoder.parameters(), lr=lr)
         self.scheduler = lr_scheduler.ReduceLROnPlateau(self.decoder_optimizer, mode='max', factor=0.5, patience=1,
-                                                        min_lr=1e-5, verbose=True)
+                                                        min_lr=1e-4, verbose=True)
         self.criterion_bce = nn.BCELoss()
         self.criterion_label = nn.BCELoss()
         self.reset()
