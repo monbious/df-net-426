@@ -268,6 +268,7 @@ class ContextEncoder(nn.Module):
         self.sketch_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
 
         self.sketch_resp_rnn = nn.GRU(hidden_size, hidden_size, dropout=dropout, batch_first=True)
+        self.fine_resp_rnn = nn.GRU(hidden_size, hidden_size, dropout=dropout, batch_first=True)
 
         self.selfatten = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
         self.selfatten_sket = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
@@ -361,9 +362,13 @@ class ContextEncoder(nn.Module):
 
         outputs_ = self.MLP_H(torch.cat((F.dropout(local_outputs, self.dropout, self.training),
                                          F.dropout(global_outputs, self.dropout, self.training)), dim=-1))
+        hidden_ = self.selfatten(outputs_, input_lengths)
 
-        hidden_ = self.selfatten(outputs_, input_lengths, ent_mask)
-        # label = self.global_classifier(global_outputs)
+        fine_resp_outputs, fine_resp_hidden = self.fine_resp_rnn(outputs_, hidden_.unsqueeze(0))
+        fine_resp_hidden = self.selfatten(fine_resp_outputs, input_lengths, ent_mask)
+
+        hidden_ = fine_resp_hidden
+        outputs_ = outputs_ + fine_resp_outputs
 
         return outputs_, hidden_, None, None, sket_resp_outputs, resp_hidden
 
