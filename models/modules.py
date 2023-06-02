@@ -339,7 +339,7 @@ class ContextEncoder(nn.Module):
         # try to encode sketch resp again
         # sketch_hidden = self.W_hid(sketch_hidden)
         sket_resp_outputs, resp_hidden = self.sketch_resp_rnn(outputs_sketch, sket_hidden.unsqueeze(0))
-        resp_hidden = self.selfatten_sket(sket_resp_outputs, sket_input_lens, ent_mask)
+        resp_hidden = self.selfatten_sket(sket_resp_outputs, sket_input_lens)
 
         resp_hidden = resp_hidden + sket_hidden
         sket_resp_outputs = sket_resp_outputs + outputs_sketch
@@ -469,10 +469,10 @@ class ExternalKnowledge(nn.Module):
             # self.m_story.append(embed_A)
         # self.m_story.append(embed_C)
         # print(kb_emb.shape)
-        kb_output = self.relu(self.fused_kb_output(torch.cat(kb_outputs, dim=-1)))
+        # kb_output = self.relu(self.fused_kb_output(torch.cat(kb_outputs, dim=-1)))
 
         ent_pointer, kb_emb = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, hidden_fine, dh_outputs_fine, ctx_word_lens)
-        return self.sigmoid(prob_logit), u[-1], ent_pointer, kb_emb, kb_output
+        return self.sigmoid(prob_logit), u[-1], ent_pointer, kb_emb, kb_outputs[-1]
 
     def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, hidden_fine, dh_outputs_fine, ctx_word_lens):
         u_ent = [hidden_fine.squeeze(0)]
@@ -503,8 +503,8 @@ class ExternalKnowledge(nn.Module):
             self.m_story_ent.append(embed_A)
         self.m_story_ent.append(embed_C)
 
-        kb_emb = self.relu(self.fused_kb(torch.cat(kb_embs, dim=-1)))
-        return self.sigmoid(prob_logit), kb_emb
+        # kb_emb = self.relu(self.fused_kb(torch.cat(kb_embs, dim=-1)))
+        return self.sigmoid(prob_logit), kb_embs[-1]
 
     def forward(self, query_vector, global_pointer):
         u = [query_vector]
