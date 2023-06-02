@@ -365,11 +365,11 @@ class ContextEncoder(nn.Module):
         hidden_ = self.selfatten(outputs_, input_lengths)
         hidden_ent = self.selfatten(outputs_, input_lengths, ent_mask)
 
-        fine_resp_outputs, fine_resp_hidden = self.fine_resp_rnn(outputs_, hidden_.unsqueeze(0))
+        fine_resp_outputs, _ = self.fine_resp_rnn(outputs_, hidden_ent.unsqueeze(0))
         fine_resp_hidden = self.selfatten(fine_resp_outputs, input_lengths, ent_mask)
 
         hidden_ = hidden_ent + fine_resp_hidden
-        outputs_ = outputs_ + fine_resp_outputs
+        outputs_ = fine_resp_outputs
 
         return outputs_, hidden_, None, None, sket_resp_outputs, resp_hidden
 
