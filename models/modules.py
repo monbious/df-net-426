@@ -135,7 +135,7 @@ class SelfAttention(nn.Module):
         self.scorer = nn.Linear(d_hid, 1)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, inp, lens, ent_mask=None):
+    def forward(self, inp, lens, ent_mask=None, get_ent=True):
         batch_size, seq_len, d_feat = inp.size()
         inp = self.dropout(inp)
         scores = self.scorer(inp.contiguous().view(-1, d_feat)).view(batch_size, seq_len)
@@ -145,8 +145,11 @@ class SelfAttention(nn.Module):
                 scores.data[i, l:] = -np.inf
         if ent_mask is not None:
             for ii in range(scores.size(0)):
-                if 1 in ent_mask[ii]:
-                    scores[ii].masked_fill((ent_mask[ii] == 2), -np.inf)
+                if get_ent:
+                    if 1 in ent_mask[ii]:
+                        scores[ii].masked_fill((ent_mask[ii] == 2), -np.inf)
+                else:
+                    scores[ii].masked_fill((ent_mask[ii] == 1), -np.inf)
         scores = F.softmax(scores, dim=1)
         context = scores.unsqueeze(2).expand_as(inp).mul(inp).sum(1)
         return context
@@ -292,8 +295,7 @@ class ContextEncoder(nn.Module):
         )
         self.W_hid = nn.Sequential(
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
-            # nn.LeakyReLU(0.1),
-            # nn.Linear(1 * self.hidden_size, 1 * self.hidden_size),
+            nn.LeakyReLU(0.1),
         )
 
         self.W = nn.Linear(hidden_size, 1)
@@ -337,7 +339,6 @@ class ContextEncoder(nn.Module):
         sket_hidden = self.selfatten_sket(outputs_sketch, sket_input_lens)
 
         # try to encode sketch resp again
-        # sketch_hidden = self.W_hid(sketch_hidden)
         sket_resp_outputs, _ = self.sketch_resp_rnn(outputs_sketch, sket_hidden.unsqueeze(0))
         resp_hidden = self.selfatten_sket(sket_resp_outputs, sket_input_lens)
 
@@ -362,7 +363,7 @@ class ContextEncoder(nn.Module):
 
         outputs_ = self.MLP_H(torch.cat((F.dropout(local_outputs, self.dropout, self.training),
                                          F.dropout(global_outputs, self.dropout, self.training)), dim=-1))
-        hidden_ = self.selfatten(outputs_, input_lengths)
+        hidden_wo = self.selfatten(outputs_, input_lengths, ent_mask, False)
         hidden_ent = self.selfatten(outputs_, input_lengths, ent_mask)
 
         fine_resp_outputs, _ = self.fine_resp_rnn(outputs_, hidden_ent.unsqueeze(0))
@@ -371,6 +372,7 @@ class ContextEncoder(nn.Module):
         hidden_ = hidden_ent + fine_resp_hidden
         outputs_ = fine_resp_outputs
 
+        resp_hidden = self.W_hid(torch.cat((hidden_wo, resp_hidden), dim=-1))
         return outputs_, hidden_, None, None, sket_resp_outputs, resp_hidden
 
 
