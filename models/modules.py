@@ -363,7 +363,7 @@ class ContextEncoder(nn.Module):
 
         outputs_ = self.MLP_H(torch.cat((F.dropout(local_outputs, self.dropout, self.training),
                                          F.dropout(global_outputs, self.dropout, self.training)), dim=-1))
-        hidden_wo = self.selfatten(outputs_, input_lengths, ent_mask, False)
+        hidden_wo = self.selfatten_sket(outputs_, input_lengths, ent_mask, False)
         hidden_ent = self.selfatten(outputs_, input_lengths, ent_mask)
 
         fine_resp_outputs, _ = self.fine_resp_rnn(outputs_, hidden_ent.unsqueeze(0))
