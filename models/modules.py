@@ -320,7 +320,7 @@ class ContextEncoder(nn.Module):
         return embedded
 
     def forward(self, input_seqs, input_lengths, sket_input_seqs, sket_input_lens, ent_mask, conv_word_lens):
-        embedded_sket = self.get_embedding(input_seqs, conv_word_lens)
+        embedded_sket = self.get_embedding(sket_input_seqs, conv_word_lens)
         outputs_sket, sketch_hidden = self.sketch_gru(embedded_sket, sket_input_lens)
 
         local_sket_outputs = []
