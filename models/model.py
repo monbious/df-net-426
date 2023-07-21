@@ -111,7 +111,7 @@ class DFNet(nn.Module):
         domains = []
         for domain in data['domain']:
             domains.append(self.domains[domain])
-        loss_e = self.criterion_bce(global_pointer, data['selector_index'])
+        # loss_e = self.criterion_bce(global_pointer, data['selector_index'])
         loss_g = self.criterion_bce(ent_pointer, data['ent_selector_index'])
         loss_v = masked_cross_entropy(
             all_decoder_outputs_vocab.transpose(0, 1).contiguous(),
@@ -126,7 +126,7 @@ class DFNet(nn.Module):
         #     data['conv_r'].contiguous(),
         #     data['response_lengths']
         # )
-        loss = loss_g + loss_v + loss_l + loss_e
+        loss = loss_g + loss_v + loss_l
 
         # golden_labels = torch.zeros_like(label_e).scatter_(1, data['label_arr'], 1)
         # loss += self.criterion_label(label_e, golden_labels)
