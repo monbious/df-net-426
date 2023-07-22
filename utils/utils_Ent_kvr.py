@@ -4,8 +4,6 @@ import torch.utils.data as data
 import torch.nn as nn
 from utils.config import *
 import ast
-import random
-from transformers import GPT2Tokenizer
 
 from utils.utils_general import *
 
@@ -14,13 +12,9 @@ def read_langs(file_name, max_line=None):
     print(("Reading lines from {}".format(file_name)))
     data, context_arr, conv_arr, kb_arr = [], [], [], []
     max_resp_len = 0
-    kb_source = []
-    conv_arr_plain = []
-    max_seq_len = 0
 
     with open('data/KVR/kvret_entities.json') as f:
         global_entity = json.load(f)
-        global_entity_keys = list(global_entity.keys()) + list(global_entity['poi'][0].keys())
 
     with open(file_name) as fin:
         cnt_lin, sample_counter = 1, 1
@@ -32,37 +26,15 @@ def read_langs(file_name, max_line=None):
                     task_type = line
                     continue
 
-                # if file_name.__contains__('train') and task_type == 'weather' and random.random() < 0.99:
-                #     continue
-
                 nid, line = line.split(' ', 1)
-
                 if '\t' in line:
                     u, r, gold_ent = line.split('\t')
                     gen_u = generate_memory(u, "$u", str(nid))
                     context_arr += gen_u
                     conv_arr += gen_u
 
-                    conv_arr_plain.append(u)
-
                     # Get gold entity for each domain
                     gold_ent = ast.literal_eval(gold_ent)
-
-                    # [word, speaker, 'turn' + str(time), 'word' + str(idx)] + ["PAD"] * (MEM_TOKEN_SIZE - 4)
-                    for i, ent in enumerate(gold_ent):
-                        if ent in u:
-                            ref = list(set([t for tup in kb_source if (ent in tup)
-                                            for t in tup if t not in global_entity_keys and t != ent]))
-                            context_arr.append(
-                                [ent, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
-                            conv_arr.append(
-                                [ent, "$u", 'turn' + str(nid), 'ent' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
-                            for refer in ref:
-                                context_arr.append(
-                                    [refer, "$u", 'turn' + str(nid), 'ref' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
-                                conv_arr.append(
-                                    [refer, "$u", 'turn' + str(nid), 'ref' + str(i)] + ["PAD"] * (MEM_TOKEN_SIZE - 4))
-
                     ent_idx_cal, ent_idx_nav, ent_idx_wet = [], [], []
                     if task_type == "weather":
                         ent_idx_wet = gold_ent
@@ -83,19 +55,15 @@ def read_langs(file_name, max_line=None):
                         ptr_index.append(index)
 
                     # Get global pointer labels for words in system response, the 1 in the end is for the NULL token
-                    selector_index = [1 if (word_arr[0] in ent_index or word_arr[0] in r.split()) else 0
-                                      for word_arr in context_arr] + [1]
-                    # for k in kb_arr:
-                    #     print(k)
+                    selector_index = [1 if (word_arr[0] in ent_index or word_arr[0] in r.split()) else 0 for word_arr in
+                                      context_arr] + [1]
+
                     sketch_response, gold_sketch = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
-                    # print('===>', conv_arr[:][0:1])
-                    sketch_response_gpt = sketch_response
-                    conv_plain = ' '.join(conv_arr_plain) + ' [SEP]'
+
                     data_detail = {
                         'context_arr': list(context_arr + [['$$$$'] * MEM_TOKEN_SIZE]),  # $$$$ is NULL token
                         'response': r,
                         'sketch_response': sketch_response,
-                        'sketch_response_gpt': sketch_response_gpt,
                         'gold_sketch': gold_sketch,
                         'ptr_index': ptr_index + [len(context_arr)],
                         'selector_index': selector_index,
@@ -104,47 +72,30 @@ def read_langs(file_name, max_line=None):
                         'ent_idx_nav': list(set(ent_idx_nav)),
                         'ent_idx_wet': list(set(ent_idx_wet)),
                         'conv_arr': list(conv_arr),
-                        'conv_arr_plain': conv_plain,
                         'kb_arr': list(kb_arr),
-                        'kb_source': kb_source,
                         'id': int(sample_counter),
                         'ID': int(cnt_lin),
                         'domain': task_type}
-
                     data.append(data_detail)
 
                     gen_r = generate_memory(r, "$s", str(nid))
                     context_arr += gen_r
                     conv_arr += gen_r
-
-                    conv_arr_plain.append(r)
-                    # if len(conv_arr_plain) > 4:
-                    #     conv_arr_plain = []
-
-                    if max_seq_len < len(conv_plain.split()):
-                        max_seq_len = len(conv_plain.split())
-
                     if max_resp_len < len(r.split()):
                         max_resp_len = len(r.split())
                     sample_counter += 1
                 else:
-                    r = line.strip()
-                    r_split = r.split(' ')
-                    kb_source.append(r_split)
-
+                    r = line
                     kb_info = generate_memory(r, "", str(nid))
                     context_arr = kb_info + context_arr
                     kb_arr += kb_info
-
             else:
                 cnt_lin += 1
                 context_arr, conv_arr, kb_arr = [], [], []
-                kb_source = []
-                conv_arr_plain = []
                 if (max_line and cnt_lin >= max_line):
                     break
 
-    return data, max_resp_len, max_seq_len
+    return data, max_resp_len
 
 
 def generate_template(global_entity, sentence, sent_ent, kb_arr, domain):
@@ -178,8 +129,6 @@ def generate_template(global_entity, sentence, sent_ent, kb_arr, domain):
                             if word in poi_list or word.replace('_', ' ') in poi_list:
                                 ent_type = key
                                 break
-                # print(word)
-                # print(ent_type)
                 sketch_response.append('@' + ent_type)
                 gold_sketch.append('@' + ent_type)
     sketch_response = " ".join(sketch_response)
@@ -204,35 +153,28 @@ def prepare_data_seq(batch_size=100):
     file_dev = 'data/KVR/dev.txt'
     file_test = 'data/KVR/test.txt'
 
-    pair_train, train_max_len, trn_seq_len = read_langs(file_train, max_line=None)
-    pair_dev, dev_max_len, dev_seq_len = read_langs(file_dev, max_line=None)
-    pair_test, test_max_len, test_seq_len = read_langs(file_test, max_line=None)
+    pair_train, train_max_len = read_langs(file_train, max_line=None)
+    pair_dev, dev_max_len = read_langs(file_dev, max_line=None)
+    pair_test, test_max_len = read_langs(file_test, max_line=None)
     max_resp_len = max(train_max_len, dev_max_len, test_max_len) + 1
-    max_seq_len = max(trn_seq_len, dev_seq_len, test_seq_len)
 
     lang = Lang()
-    tokenizer = GPT2Tokenizer.from_pretrained("gpt2", padding_side='right')
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.pad_token_id = tokenizer.eos_token_id
-    tokenizer.add_tokens(['[SEP]'])
-    # print('vocab_size', tokenizer.vocab_size)
 
-    train = get_seq(pair_train, lang, batch_size, True, tokenizer)
-    dev = get_seq(pair_dev, lang, batch_size, False, tokenizer)
-    test = get_seq(pair_test, lang, batch_size, False, tokenizer)
+    train = get_seq(pair_train, lang, batch_size, True)
+    dev = get_seq(pair_dev, lang, batch_size, False)
+    test = get_seq(pair_test, lang, batch_size, False)
 
     print("Read %s sentence pairs train" % len(pair_train))
     print("Read %s sentence pairs dev" % len(pair_dev))
     print("Read %s sentence pairs test" % len(pair_test))
     print("Vocab_size: %s " % lang.n_words)
     print("Max. length of system response: %s " % max_resp_len)
-    print("Max. length of input: %s " % max_seq_len)
     print("USE_CUDA={}".format(USE_CUDA))
 
-    return train, dev, test, [], lang, max_resp_len, max_seq_len, tokenizer
+    return train, dev, test, [], lang, max_resp_len
 
 
 def get_data_seq(file_name, lang, max_len, batch_size=1):
-    pair, _, _ = read_langs(file_name, max_line=None)
+    pair, _ = read_langs(file_name, max_line=None)
     d = get_seq(pair, lang, batch_size, False)
     return d

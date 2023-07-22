@@ -68,7 +68,6 @@ class RNN_Residual(nn.Module):
     def forward(self, input, input_lengths):
         input_forward = input
         input_backward = self.flipByLength(input, input_lengths)
-
         for i in range(self.n_layers):
             output_forward, hidden_forward = self.run_rnn(self.__getattr__('forward_rnn_{}'.format(i)), input_forward,
                                                           input_lengths, self.batch_first)
@@ -124,28 +123,6 @@ class CNNClassifier(nn.Module):
         return self.layer(torch.cat(conv, 1))
 
 
-class CNNClassifierForContext(nn.Module):
-
-    def __init__(self, input_dim, output_channel, filter, output_dim, dropout):
-        super(CNNClassifierForContext, self).__init__()
-
-        self.cnn = nn.ModuleList([nn.Conv2d(1, output_channel, (f, input_dim)) for f in filter])
-
-        linear_dim = output_channel * len(filter)
-        self.layer = nn.Sequential(
-            nn.Dropout(dropout),
-            nn.Linear(linear_dim, output_dim, bias=False),
-            nn.LeakyReLU(0.1),
-            # nn.Sigmoid()
-        )
-
-    def forward(self, input):
-        input = input.contiguous().unsqueeze(1)
-        conv = [F.relu(cnn_(input)).squeeze(3) for cnn_ in self.cnn]
-        conv = [F.max_pool1d(i, i.size(2)).squeeze(2) for i in conv]
-        return self.layer(torch.cat(conv, 1))
-
-
 class SelfAttention(nn.Module):
     """
     scores each element of the sequence with a linear layer and uses the normalized scores to compute a context over the sequence.
@@ -185,71 +162,8 @@ class MLPSelfAttention(nn.Module):
         scores_ = self.scorer(inp.contiguous().view(batch_size, seq_len, -1))
         scores_ = scores_.masked_fill((mask == 0).unsqueeze(-1), -1e9)
         scores = F.softmax(scores_, dim=-1)
-        # scores = scores[:, :, :3]
-        # inp = inp[:, :, :, :3]
         context = scores.unsqueeze(-2).expand_as(inp).mul(inp).sum(-1)
-        # context = scores.unsqueeze(-2).expand_as(inp).mul(inp).max(-1)[0]
         return context, scores_
-
-
-class PositionalEncoding(nn.Module):
-
-    def __init__(self, d_model, max_len=5000):
-        super(PositionalEncoding, self).__init__()
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
-        #pe.requires_grad = False
-        self.register_buffer('pe', pe)
-
-    def forward(self, x):
-        return x + self.pe[:, :x.size(1)]
-
-
-class TransformerModel(nn.Module):
-    def __init__(self, vocab_size, max_seq_len, hidden_size, num_layers, num_heads, dropout_prob, embedding):
-        super(TransformerModel, self).__init__()
-        self.d_model = hidden_size
-        self.embedding = embedding
-        self.pos_encoder = PositionalEncoding(hidden_size, max_seq_len)
-
-        self.transformer = nn.Transformer(hidden_size, num_heads, num_layers, num_layers, 1*hidden_size,
-                                          dropout_prob, batch_first=True)
-        self.encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(hidden_size, num_heads, 1*hidden_size, dropout_prob, batch_first=True),
-            num_layers)
-        self.decoder = nn.TransformerDecoder(
-            nn.TransformerDecoderLayer(hidden_size, num_heads, 1*hidden_size, dropout_prob, batch_first=True),
-            num_layers)
-
-        self.fc = nn.Linear(hidden_size, vocab_size)
-
-    def forward(self, src, tgt):
-        # src: (batch_size, seq_len)
-        # tgt: (batch_size, seq_len)
-        # print(src.shape, tgt.shape)
-        src_mask = _cuda(nn.Transformer.generate_square_subsequent_mask(src.size(1)))
-        tgt_mask = _cuda(nn.Transformer.generate_square_subsequent_mask(tgt.size(1)))
-
-        src_emb = self.embedding(src) * math.sqrt(self.d_model)
-        src_emb = self.pos_encoder(src_emb)
-        tgt_emb = self.embedding(tgt) * math.sqrt(self.d_model)
-        tgt_emb = self.pos_encoder(tgt_emb)
-
-        # encoder_out = self.encoder(src_emb, src_mask)
-        # decoder_out = self.decoder(tgt_emb, encoder_out, tgt_mask)
-        output = self.transformer(src_emb, tgt_emb, src_mask, tgt_mask)
-
-        output = self.fc(output)
-        # print(tgt_mask.shape)
-        return output
-
-    def train_temp(self, input, target):
-        output = self.forward(input, target)
-        return output
 
 
 class ContextEncoder(nn.Module):
@@ -266,14 +180,14 @@ class ContextEncoder(nn.Module):
         self.embedding = nn.Embedding(input_size, args['embeddings_dim'], padding_idx=PAD_token)
         self.odim = args['embeddings_dim']
         self.global_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
-        self.selfatten = SelfAttention(1 * self.hidden_size, dropout=self.dropout)
+        self.selfatten = SelfAttention(2 * self.hidden_size, dropout=self.dropout)
         for domain in domains.keys():
             setattr(self, '{}_gru'.format(domain),
                     RNN_Residual(self.odim, hidden_size, n_layers, dropout=self.dropout))
         self.MLP_H = nn.Sequential(
-            nn.Linear(4 * self.hidden_size, 2 * self.hidden_size),
+            nn.Linear(4 * self.hidden_size, 4 * self.hidden_size),
             nn.LeakyReLU(0.1),
-            nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
+            nn.Linear(4 * self.hidden_size, 2 * self.hidden_size),
         )
 
         self.W = nn.Linear(2 * hidden_size, hidden_size)
@@ -281,9 +195,6 @@ class ContextEncoder(nn.Module):
         self.global_classifier = nn.Sequential(
             GradientReversal(),
             CNNClassifier(2 * hidden_size, hidden_size, [2, 3], len(domains), dropout))
-        self.cnn_outputs = nn.Sequential(
-            GradientReversal(),
-            CNNClassifierForContext(1 * hidden_size, hidden_size, [3, 4], hidden_size, dropout))
 
     def get_state(self, bsz):
         """Get cell states and hidden states."""
@@ -294,7 +205,6 @@ class ContextEncoder(nn.Module):
         embedded = embedded.view(input_seqs.size() + (embedded.size(-1),))
         embedded = torch.sum(embedded, 2).squeeze(2)
         embedded = self.dropout_layer(embedded.transpose(0, 1))
-
         global_outputs, global_hidden = self.global_gru(embedded, input_lengths)
         local_outputs = []
 
@@ -308,10 +218,12 @@ class ContextEncoder(nn.Module):
             local_outputs.append(local_output)
 
         local_outputs, scores = self.mix_attention(torch.stack(local_outputs, dim=-1), mask)
-        outputs_ = self.MLP_H(torch.cat((F.dropout(local_outputs, self.dropout, self.training),
-                                         F.dropout(global_outputs, self.dropout, self.training)), dim=-1))
+        outputs = self.MLP_H(torch.cat((F.dropout(local_outputs, self.dropout, self.training),
+                                        F.dropout(global_outputs, self.dropout, self.training)), dim=-1))
 
-        hidden_ = self.selfatten(outputs_, input_lengths)
+        hidden = self.selfatten(outputs, input_lengths)
+        outputs_ = self.W(outputs)
+        hidden_ = self.W(hidden)
         label = self.global_classifier(global_outputs)
         return outputs_, hidden_, label, scores
 
@@ -328,35 +240,14 @@ class ExternalKnowledge(nn.Module):
             C.weight.data.normal_(0, 0.1)
             self.add_module("C_{}".format(hop), C)
         self.C = AttrProxy(self, "C_")
-
         self.softmax = nn.Softmax(dim=1)
         self.sigmoid = nn.Sigmoid()
         self.conv_layer = nn.Conv1d(embedding_dim, embedding_dim, 5, padding=2)
-
-        self.MLP_concat_embed = nn.Sequential(
-            nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
-            nn.LeakyReLU(0.1),
-            nn.Linear(1 * self.embedding_dim, 1 * self.embedding_dim),
-        )
-        self.MLP_concat_embed_c = nn.Sequential(
-            nn.Linear(2 * self.embedding_dim, 1 * self.embedding_dim),
-            nn.LeakyReLU(0.1),
-            nn.Linear(1 * self.embedding_dim, 1 * self.embedding_dim),
-        )
 
     def add_lm_embedding(self, full_memory, kb_len, conv_len, hiddens):
         for bi in range(full_memory.size(0)):
             start, end = kb_len[bi], kb_len[bi] + conv_len[bi]
             full_memory[bi, start:end, :] = full_memory[bi, start:end, :] + hiddens[bi, :conv_len[bi], :]
-        return full_memory
-
-    def add_ex_embedding(self, full_memory, kb_len, conv_len, hiddens, kb_memory=False):
-        for bi in range(full_memory.size(0)):
-            if kb_memory:
-                start, end = kb_len[bi], kb_len[bi] + conv_len[bi]
-                full_memory[bi, start:end, :] = full_memory[bi, start:end, :] + hiddens[bi, :conv_len[bi], :]
-            else:
-                full_memory[bi, :conv_len[bi], :] = full_memory[bi, :conv_len[bi], :] + hiddens[bi, :conv_len[bi], :]
         return full_memory
 
     def get_ck(self, hop, story, story_size):
@@ -372,21 +263,13 @@ class ExternalKnowledge(nn.Module):
         embed = torch.sum(embed, 2).squeeze(2)
         return embed
 
-    def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, sk_res):
+    def load_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains):
         # Forward multiple hop mechanism
         u = [hidden.squeeze(0)]
         story_size = story.size()
-        sk_res = sk_res.unsqueeze(-2)
-        sk_res_size = sk_res.size()
-        # self.m_story = []
+        self.m_story = []
         for hop in range(self.max_hops):
             embed_A = self.get_ck(hop, story, story_size)
-
-            # sk_res_embed = self.get_ck(hop, sk_res, sk_res_size)
-            # sk_res_expand = sk_res_embed.expand_as(embed_A)
-            # concat_embed = torch.cat((embed_A, sk_res_expand), dim=-1)
-            # embed_A = self.MLP_concat_embed(concat_embed)
-
             embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
             embed_A = self.dropout_layer(embed_A)
 
@@ -397,69 +280,27 @@ class ExternalKnowledge(nn.Module):
             prob_ = self.softmax(prob_logit)
 
             embed_C = self.get_ck(hop + 1, story, story_size)
-
-            # sk_res_embed_c = self.get_ck(hop + 1, sk_res, sk_res_size)
-            # sk_res_expand_c = sk_res_embed_c.expand_as(embed_C)
-            # concat_embed_c = torch.cat((embed_C, sk_res_expand_c), dim=-1)
-            # embed_C = self.MLP_concat_embed_c(concat_embed_c)
-
             embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
+
             prob = prob_.unsqueeze(2).expand_as(embed_C)
             o_k = torch.sum(embed_C * prob, 1)
             u_k = u[-1] + o_k
             u.append(u_k)
-            # self.m_story.append(embed_A)
-        # self.m_story.append(embed_C)
-        gl_pointer = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains)
-        return gl_pointer, u[-1]
-
-    def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains):
-        u_ent = [hidden.squeeze(0)]
-        story_size = story.size()
-        self.m_story_ent = []
-        for hop in range(self.max_hops):
-            embed_A = self.get_ck(hop, story, story_size)
-
-            # story_cnn = self.cnn_outputs(embed_A).unsqueeze(1)
-            # story_cnn_expand = story_cnn.expand_as(embed_A)
-            # embed_A = embed_A + story_cnn_expand
-
-            embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs)
-            embed_A = self.dropout_layer(embed_A)
-
-            if (len(list(u_ent[-1].size())) == 1):
-                u_ent[-1] = u_ent[-1].unsqueeze(0)
-            u_temp = u_ent[-1].unsqueeze(1).expand_as(embed_A)
-            prob_logit = torch.sum(embed_A * u_temp, 2)
-            prob_ = self.softmax(prob_logit)
-
-            embed_C = self.get_ck(hop + 1, story, story_size)
-
-            # story_cnn_c = self.cnn_outputs_c(embed_C).unsqueeze(1)
-            # story_cnn_expand_c = story_cnn_c.expand_as(embed_C)
-            # embed_C = embed_C + story_cnn_expand_c
-
-            embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs)
-            prob = prob_.unsqueeze(2).expand_as(embed_C)
-            o_k = torch.sum(embed_C * prob, 1)
-            u_k = u_ent[-1] + o_k
-            u_ent.append(u_k)
-            self.m_story_ent.append(embed_A)
-        self.m_story_ent.append(embed_C)
-        return self.sigmoid(prob_logit)
+            self.m_story.append(embed_A)
+        self.m_story.append(embed_C)
+        return self.sigmoid(prob_logit), u[-1]
 
     def forward(self, query_vector, global_pointer):
         u = [query_vector]
         for hop in range(self.max_hops):
-            m_A = self.m_story_ent[hop]
+            m_A = self.m_story[hop]
             m_A = m_A * global_pointer.unsqueeze(2).expand_as(m_A)
             if (len(list(u[-1].size())) == 1):
                 u[-1] = u[-1].unsqueeze(0)
             u_temp = u[-1].unsqueeze(1).expand_as(m_A)
             prob_logits = torch.sum(m_A * u_temp, 2)
             prob_soft = self.softmax(prob_logits)
-
-            m_C = self.m_story_ent[hop + 1]
+            m_C = self.m_story[hop + 1]
             m_C = m_C * global_pointer.unsqueeze(2).expand_as(m_C)
             prob = prob_soft.unsqueeze(2).expand_as(m_C)
             o_k = torch.sum(m_C * prob, 1)
@@ -490,26 +331,19 @@ class LocalMemoryDecoder(nn.Module):
         self.relu = nn.ReLU()
         self.projector = nn.Linear(2 * hidden_dim, hidden_dim)
         self.MLP = nn.Sequential(
-            nn.Linear(2 * hidden_dim, 1 * hidden_dim),
+            nn.Linear(2 * hidden_dim, 2 * hidden_dim),
             nn.LeakyReLU(0.1),
-            # nn.Linear(1 * hidden_dim, hidden_dim),
-            # nn.LeakyReLU(0.1),
+            nn.Linear(2 * hidden_dim, hidden_dim),
         )
 
         self.attn_table = nn.Sequential(
             nn.Linear(hidden_dim * 2, hidden_dim, bias=False),
-            # nn.Tanh(),
-            # nn.Linear(hidden_dim, hidden_dim, bias=False),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, hidden_dim, bias=False),
             nn.Tanh(),
             nn.Linear(hidden_dim, 1)
         )
         self.projector2 = nn.Linear(2 * hidden_dim, hidden_dim)
-        self.projector3 = nn.Linear(2 * hidden_dim, hidden_dim)
-        self.projector4 = nn.Sequential(
-            nn.Linear(3 * hidden_dim, 2 * hidden_dim),
-            nn.Tanh(),
-            nn.Linear(2 * hidden_dim, hidden_dim),
-        )
         self.domain_emb = nn.Embedding(len(domains), self.embedding_dim)
 
         self.global_classifier = nn.Sequential(GradientReversal(),
@@ -519,28 +353,13 @@ class LocalMemoryDecoder(nn.Module):
         cond = self.attn_table(torch.cat((H, hidden.unsqueeze(1).expand_as(H)), dim=-1))
         cond = F.softmax(cond.squeeze(-1), dim=-1)
         hidden_ = cond.unsqueeze(-1).expand_as(H).mul(H).sum(-2)
-        context = torch.tanh(self.projector2(torch.cat((hidden, hidden_), dim=-1).unsqueeze(0)))
+        context = F.tanh(self.projector2(torch.cat((hidden, hidden_), dim=-1).unsqueeze(0)))
         p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
         return p_vocab, context
-
-    def get_p_vocab_atten(self, hidden, tmp_response, kb_readout):
-        h = hidden.unsqueeze(1)
-        atten_weights = self.attn_table(torch.cat((tmp_response, h.expand_as(tmp_response)), dim=-1))
-        atten_weights = F.softmax(atten_weights.transpose(1, 2), dim=-1)
-        H_ = atten_weights.bmm(tmp_response)
-        context = torch.tanh(self.projector4(torch.cat((H_, h, kb_readout.unsqueeze(1)), dim=-1))).transpose(0, 1)
-        p_vocab = self.attend_vocab(self.C.weight, context.squeeze(0))
-        return p_vocab, context
-
-    def get_emb(self, story, story_size):
-        embed = self.C(story.contiguous().view(story_size[0], -1))
-        embed = embed.view(story_size + (embed.size(-1),))
-        embed = torch.sum(embed, 2).squeeze(2)
-        return embed
 
     def forward(self, extKnow, story_size, story_lengths, copy_list, encode_hidden, target_batches, max_target_length,
                 batch_size, use_teacher_forcing, get_decoded_words, global_pointer, H=None, global_entity_type=None,
-                domains=None, kb_readout=None, tmp_resp=None):
+                domains=None):
         # Initialize variables for vocab and pointer
         all_decoder_outputs_vocab = _cuda(torch.zeros(max_target_length, batch_size, self.num_vocab))
         all_decoder_outputs_ptr = _cuda(torch.zeros(max_target_length, batch_size, story_size[1]))
@@ -548,8 +367,6 @@ class LocalMemoryDecoder(nn.Module):
             _cuda(torch.LongTensor([SOS_token] * batch_size)))
         memory_mask_for_step = _cuda(torch.ones(story_size[0], story_size[1]))
         decoded_fine, decoded_coarse = [], []
-
-        tmp_response = self.get_emb(tmp_resp, tmp_resp.unsqueeze(-1).size())
         hidden = self.relu(self.projector(encode_hidden)).unsqueeze(0)
         hidden_locals = []
         for i in range(len(self.domains)):
@@ -565,7 +382,7 @@ class LocalMemoryDecoder(nn.Module):
                 decoder_input = self.C(decoder_input)
             embed_q = self.dropout_layer(decoder_input)
             embed_q = embed_q.view(1, -1, self.embedding_dim)
-            gl_output, hidden = self.sketch_rnn_global(embed_q, hidden)
+            _, hidden = self.sketch_rnn_global(embed_q, hidden)
             hidden_locals_ = []
             for domain in self.domains.values():
                 hidden_locals_.append(self.sketch_rnn_local[domain](embed_q, hidden_locals[domain])[1])
@@ -576,21 +393,16 @@ class LocalMemoryDecoder(nn.Module):
             scores.append(score)
             query_vector = self.MLP(torch.cat((F.dropout(hidden, self.dropout, self.training),
                                                F.dropout(hidden_local, self.dropout, self.training)), dim=-1))
-            global_hiddens.append(query_vector)
-            # global_hiddens.append(hidden)
+            global_hiddens.append(hidden)
             local_hiddens.append(hidden_local)
 
-            p_vocab, context = self.get_p_vocab_atten(query_vector[0], tmp_response, kb_readout)
-            # p_vocab, context = self.get_p_vocab(query_vector[0], H)
-            # print(p_vocab.shape)
-            # print(p_vocab[0], type(p_vocab[0]))
+            p_vocab, context = self.get_p_vocab(query_vector[0], H)
 
             all_decoder_outputs_vocab[t] = p_vocab
             _, topvi = p_vocab.data.topk(1)
 
-            context_ = torch.tanh(self.projector3(torch.cat((context[0], kb_readout), dim=-1)))
             # query the external konwledge using the hidden state of sketch RNN
-            prob_soft, prob_logits = extKnow(context_, global_pointer)
+            prob_soft, prob_logits = extKnow(context[0], global_pointer)
             all_decoder_outputs_ptr[t] = prob_logits
 
             if use_teacher_forcing:
@@ -628,7 +440,6 @@ class LocalMemoryDecoder(nn.Module):
 
         label = self.global_classifier(torch.cat(global_hiddens, dim=0).transpose(0, 1))
         scores = torch.cat(scores, dim=0).transpose(0, 1).contiguous()
-        # print('all_decoder_outputs_vocab: ', all_decoder_outputs_vocab.shape)
         return all_decoder_outputs_vocab, all_decoder_outputs_ptr, decoded_fine, decoded_coarse, label, scores
 
     def attend_vocab(self, seq, cond):

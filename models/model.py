@@ -1,21 +1,21 @@
+import torch
+import torch.nn as nn
 from torch.optim import lr_scheduler
-import json
-import random
-
-from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from torch import optim
-from torch.optim import lr_scheduler
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers import GPT2LMHeadModel, GPT2Config
+import torch.nn.functional as F
+import random
+import numpy as np
+import os
+import json
 
-from models.modules import *
+from utils.measures import wer, moses_multi_bleu
 from utils.masked_cross_entropy import *
-from utils.measures import moses_multi_bleu
+from utils.config import *
+from models.modules import *
 
 
 class DFNet(nn.Module):
-    def __init__(self, hidden_size, lang, max_resp_len, path, lr, n_layers, dropout, domains=None, max_seq_len=500,
-                 tf_num_layers=4, tf_num_heads=8, tokenizer=None):
+    def __init__(self, hidden_size, lang, max_resp_len, path, lr, n_layers, dropout, domains=None):
         super(DFNet, self).__init__()
         self.input_size = lang.n_words
         self.output_size = lang.n_words
@@ -29,63 +29,45 @@ class DFNet(nn.Module):
         self.softmax = nn.Softmax(dim=0)
         self.domains = domains
 
-        self.gpt2_config = GPT2Config.from_pretrained('gpt2')
-        self.gpt2_config.n_embd = 128
-        self.gpt2_config.n_layer = 4
-        self.gpt2_config.n_head = 8
-
         if path:
             if USE_CUDA:
                 print("MODEL {} LOADED".format(str(path)))
                 self.encoder = torch.load(str(path) + '/enc.th')
-                self.gptModel = AutoModelForCausalLM.from_pretrained(str(path))
-                self.tokenizer = AutoTokenizer.from_pretrained(str(path))
                 self.extKnow = torch.load(str(path) + '/enc_kb.th')
                 self.decoder = torch.load(str(path) + '/dec.th')
             else:
                 print("MODEL {} LOADED".format(str(path)))
                 self.encoder = torch.load(str(path) + '/enc.th', lambda storage, loc: storage)
-                self.gptModel = AutoModelForCausalLM.from_pretrained(str(path))
-                self.tokenizer = AutoTokenizer.from_pretrained(str(path))
                 self.extKnow = torch.load(str(path) + '/enc_kb.th', lambda storage, loc: storage)
                 self.decoder = torch.load(str(path) + '/dec.th', lambda storage, loc: storage)
         else:
             self.encoder = ContextEncoder(lang.n_words, hidden_size, dropout, domains)
-            self.gptModel = GPT2LMHeadModel(self.gpt2_config)
-            self.tokenizer = tokenizer
-            self.gptModel.resize_token_embeddings(len(self.tokenizer))
             self.extKnow = ExternalKnowledge(lang.n_words, hidden_size, n_layers, dropout)
             self.decoder = LocalMemoryDecoder(self.encoder.embedding, lang, hidden_size, self.decoder_hop,
                                               dropout, domains=domains)
 
         # Initialize optimizers and criterion
         self.encoder_optimizer = optim.Adam(self.encoder.parameters(), lr=lr)
-        self.gptModel_optimizer = optim.Adam(self.gptModel.parameters(), lr=lr)
         self.extKnow_optimizer = optim.Adam(self.extKnow.parameters(), lr=lr)
         self.decoder_optimizer = optim.Adam(self.decoder.parameters(), lr=lr)
         self.scheduler = lr_scheduler.ReduceLROnPlateau(self.decoder_optimizer, mode='max', factor=0.5, patience=1,
                                                         min_lr=0.0001, verbose=True)
-        self.gpt_scheduler = lr_scheduler.ReduceLROnPlateau(self.gptModel_optimizer, mode='max', factor=0.5, patience=1,
-                                                            min_lr=0.00001, verbose=True)
         self.criterion_bce = nn.BCELoss()
         self.criterion_label = nn.BCELoss()
-        self.cross_entr_loss = nn.CrossEntropyLoss()
         self.reset()
+
         if USE_CUDA:
             self.encoder.cuda()
             self.extKnow.cuda()
             self.decoder.cuda()
-            self.gptModel.cuda()
 
     def print_loss(self):
         print_loss_avg = self.loss / self.print_every
         print_loss_g = self.loss_g / self.print_every
         print_loss_v = self.loss_v / self.print_every
         print_loss_l = self.loss_l / self.print_every
-        print_loss_t = self.loss_t / self.print_every
         self.print_every += 1
-        return 'L:{:.2f},LE:{:.2f},LG:{:.2f},LP:{:.2f},LT:{:.2f}' \
-            .format(print_loss_avg, print_loss_g, print_loss_v, print_loss_l, print_loss_t)
+        return 'L:{:.2f},LE:{:.2f},LG:{:.2f},LP:{:.2f}'.format(print_loss_avg, print_loss_g, print_loss_v, print_loss_l)
 
     def save_model(self, dec_type):
         if args['dataset'] == 'kvr':
@@ -100,13 +82,11 @@ class DFNet(nn.Module):
             os.makedirs(directory)
         args['path'] = directory
         torch.save(self.encoder, directory + '/enc.th')
-        self.gptModel.save_pretrained(directory)
-        self.tokenizer.save_pretrained(directory)
         torch.save(self.extKnow, directory + '/enc_kb.th')
         torch.save(self.decoder, directory + '/dec.th')
 
     def reset(self):
-        self.loss, self.print_every, self.loss_g, self.loss_v, self.loss_l, self.loss_t = 0, 1, 0, 0, 0, 0
+        self.loss, self.print_every, self.loss_g, self.loss_v, self.loss_l = 0, 1, 0, 0, 0
 
     def _cuda(self, x):
         if USE_CUDA:
@@ -118,25 +98,20 @@ class DFNet(nn.Module):
         if reset: self.reset()
         # Zero gradients of both optimizers
         self.encoder_optimizer.zero_grad()
-        self.gptModel_optimizer.zero_grad()
         self.extKnow_optimizer.zero_grad()
         self.decoder_optimizer.zero_grad()
 
         # Encode and Decode
         use_teacher_forcing = random.random() < args['teacher_forcing_ratio']
         max_target_length = max(data['response_lengths'])
-        all_decoder_outputs_vocab, all_decoder_outputs_ptr, _, _, global_pointer, \
-        label_e, label_d, label_mix_e, label_mix_d, gpt_loss = self.encode_and_decode(
+        all_decoder_outputs_vocab, all_decoder_outputs_ptr, _, _, global_pointer, label_e, label_d, label_mix_e, label_mix_d = self.encode_and_decode(
             data, max_target_length, use_teacher_forcing, False)
 
         # Loss calculation and backpropagation
         domains = []
         for domain in data['domain']:
             domains.append(self.domains[domain])
-        # print(global_pointer)
         loss_g = self.criterion_bce(global_pointer, data['selector_index'])
-        # print(all_decoder_outputs_vocab.transpose(0, 1).shape)
-        # print(transformer_output.shape)
         loss_v = masked_cross_entropy(
             all_decoder_outputs_vocab.transpose(0, 1).contiguous(),
             data['sketch_response'].contiguous(),
@@ -145,13 +120,7 @@ class DFNet(nn.Module):
             all_decoder_outputs_ptr.transpose(0, 1).contiguous(),
             data['ptr_index'].contiguous(),
             data['response_lengths'])
-
-        # print('loss_l: ', loss_l)
-        # loss_t = self.cross_entr_loss(transformer_output.contiguous().view(-1, self.output_size),
-        #                               data['sketch_response_tf'][:, 1:].contiguous().view(-1))
-        # print('loss_t: ', loss_t)
-        loss_t = gpt_loss
-        loss = loss_g + loss_v + loss_l + loss_t
+        loss = loss_g + loss_v + loss_l
 
         golden_labels = torch.zeros_like(label_e).scatter_(1, data['label_arr'], 1)
         loss += self.criterion_label(label_e, golden_labels)
@@ -168,56 +137,15 @@ class DFNet(nn.Module):
         ec = torch.nn.utils.clip_grad_norm_(self.encoder.parameters(), clip)
         ec = torch.nn.utils.clip_grad_norm_(self.extKnow.parameters(), clip)
         dc = torch.nn.utils.clip_grad_norm_(self.decoder.parameters(), clip)
-        tf = torch.nn.utils.clip_grad_norm_(self.gptModel.parameters(), clip)
 
         # Update parameters with optimizers
         self.encoder_optimizer.step()
-        self.gptModel_optimizer.step()
         self.extKnow_optimizer.step()
         self.decoder_optimizer.step()
         self.loss += loss.item()
         self.loss_g += loss_g.item()
         self.loss_v += loss_v.item()
         self.loss_l += loss_l.item()
-        self.loss_t += loss_t.item()
-
-    def get_sentence_bleu(self, pred_text, refer_text):
-        predicted_text = self.gpt2_tokenizer.tokenize(pred_text)
-        reference_text = [self.gpt2_tokenizer.tokenize(refer_text)]
-        # print(reference_text)
-        bleu_score = sentence_bleu(reference_text, predicted_text, smoothing_function=SmoothingFunction.method1)
-        return bleu_score
-
-    def process_extract_res(self, data, max_target_length):
-        g_inputs, g_mask = self._cuda(data['g_input_ids_padded']), self._cuda(data['g_attention_masks'])
-        output_ids = self.gptModel.generate(input_ids=g_inputs, pad_token_id=self.tokenizer.eos_token_id,
-                                            attention_mask=g_mask,
-                                            max_new_tokens=max_target_length, do_sample=True, num_beams=5,
-                                            temperature=1.0)
-        predicted_texts = [self.tokenizer.decode(output_id, skip_special_tokens=True) for output_id in
-                           output_ids]
-        bat_token_arr = []
-        for i, pred_text in enumerate(predicted_texts):
-            # print('pred_text: ', pred_text)
-            pred_resp = pred_text.split('[SEP]')[-1].strip()
-            if not self.gptModel.training:
-                print('='*50)
-                print('  pred_resp: ', pred_resp)
-                print('target_resp: ', data['answer_texts'][i])
-            # bleu = self.get_sentence_bleu(pred_resp, data['answer_texts'][i])
-            sen_arr = []
-            for token in self.tokenizer.tokenize(pred_resp):
-                token = token.replace('Ġ', '')
-                try:
-                    lang_token_id = self.lang.word2index[token]
-                except Exception:
-                    lang_token_id = UNK_token
-                sen_arr.append(lang_token_id)
-            bat_token_arr.append(sen_arr)
-        max_len = max(len(sen) for sen in bat_token_arr)
-        bat_token_arr = [ids + [PAD_token] * (max_len - len(ids)) for ids in bat_token_arr]
-        tmp_resp = self._cuda(torch.LongTensor(bat_token_arr))
-        return tmp_resp
 
     def encode_and_decode(self, data, max_target_length, use_teacher_forcing, get_decoded_words,
                           global_entity_type=None):
@@ -238,21 +166,10 @@ class DFNet(nn.Module):
         else:
             story, conv_story = data['context_arr'], data['conv_arr']
 
+        # Encode dialog history and KB to vectors
         dh_outputs, dh_hidden, label_e, label_mix_e = self.encoder(conv_story, data['conv_arr_lengths'])
-
-        if self.gptModel.training:
-            conv_inputs, mask = self._cuda(data['input_ids_padded']), self._cuda(data['attention_masks'])
-            gpt_loss = self.gptModel(conv_inputs, attention_mask=mask, labels=conv_inputs)[0]
-
-            self.tokenizer.padding_side = 'left'
-            tmp_resp = self.process_extract_res(data, max_target_length)
-            self.tokenizer.padding_side = 'right'
-        else:
-            gpt_loss = None
-            tmp_resp = self.process_extract_res(data, max_target_length)
-
         global_pointer, kb_readout = self.extKnow.load_memory(story, data['kb_arr_lengths'], data['conv_arr_lengths'],
-                                                              dh_hidden, dh_outputs, data['domain'], tmp_resp)
+                                                              dh_hidden, dh_outputs, data['domain'])
         encoded_hidden = torch.cat((dh_hidden, kb_readout), dim=1)
 
         # Get the words that can be copy from the memory
@@ -261,7 +178,6 @@ class DFNet(nn.Module):
         for elm in data['context_arr_plain']:
             elm_temp = [word_arr[0] for word_arr in elm]
             self.copy_list.append(elm_temp)
-        # print('======>', data['context_arr_plain'])
 
         outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, label_d, label_mix_d = self.decoder.forward(
             self.extKnow,
@@ -277,21 +193,16 @@ class DFNet(nn.Module):
             global_pointer,
             H=dh_outputs,
             global_entity_type=global_entity_type,
-            domains=data['label_arr'],
-            kb_readout=kb_readout,
-            tmp_resp=tmp_resp)
+            domains=data['label_arr'])
 
-        return outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, global_pointer, \
-               label_e, label_d, label_mix_e, label_mix_d, gpt_loss
+        return outputs_vocab, outputs_ptr, decoded_fine, decoded_coarse, global_pointer, label_e, label_d, label_mix_e, label_mix_d
 
     def evaluate(self, dev, matric_best, output=False, early_stop=None):
         print("STARTING EVALUATION")
         # Set to not-training mode to disable dropout
         self.encoder.train(False)
-        self.gptModel.train(False)
         self.extKnow.train(False)
         self.decoder.train(False)
-        self.tokenizer.padding_side = 'left'
 
         ref, hyp = [], []
         ids = []
@@ -344,11 +255,11 @@ class DFNet(nn.Module):
         for j, data_dev in pbar:
             ids.extend(data_dev['id'])
             # Encode and Decode
-            _, _, decoded_fine, decoded_coarse, global_pointer, _, _, _, _, _ = self.encode_and_decode(data_dev,
-                                                                                                       self.max_resp_len,
-                                                                                                       False,
-                                                                                                       True,
-                                                                                                       global_entity_type)
+            _, _, decoded_fine, decoded_coarse, global_pointer, _, _, _, _ = self.encode_and_decode(data_dev,
+                                                                                                    self.max_resp_len,
+                                                                                                    False,
+                                                                                                    True,
+                                                                                                    global_entity_type)
             decoded_coarse = np.transpose(decoded_coarse)
             decoded_fine = np.transpose(decoded_fine)
             for bi, row in enumerate(decoded_fine):
@@ -466,10 +377,8 @@ class DFNet(nn.Module):
 
         # Set back to training mode
         self.encoder.train(True)
-        self.gptModel.train(True)
         self.extKnow.train(True)
         self.decoder.train(True)
-        self.tokenizer.padding_side = 'right'
 
         bleu_score = moses_multi_bleu(np.array(hyp), np.array(ref), lowercase=True)
         acc_score = acc / float(total)
@@ -478,9 +387,9 @@ class DFNet(nn.Module):
         if args['dataset'] == 'kvr':
             print("BLEU SCORE:\t" + str(bleu_score))
             print("F1-macro SCORE:\t{}".format(F1_pred / float(F1_count)))
-            print("F1-macro-schedule SCORE:\t{}".format(F1_cal_pred / float(F1_cal_count)))
-            print("F1-macro-weather SCORE:\t{}".format(F1_wet_pred / float(F1_wet_count)))
-            print("F1-macro-navigate SCORE:\t{}".format(F1_nav_pred / float(F1_nav_count)))
+            print("F1-macro-sche SCORE:\t{}".format(F1_cal_pred / float(F1_cal_count)))
+            print("F1-macro-wea SCORE:\t{}".format(F1_wet_pred / float(F1_wet_count)))
+            print("F1-macro-nav SCORE:\t{}".format(F1_nav_pred / float(F1_nav_count)))
 
             P_score = TP_all / float(TP_all + FP_all) if (TP_all + FP_all) != 0 else 0
             R_score = TP_all / float(TP_all + FN_all) if (TP_all + FN_all) != 0 else 0
@@ -493,9 +402,9 @@ class DFNet(nn.Module):
 
             F1_score = self.compute_F1(P_score, R_score)
             print("F1-micro SCORE:\t{}".format(F1_score))
-            print("F1-micro-schedule SCORE:\t{}".format(self.compute_F1(P_sche_score, R_sche_score)))
-            print("F1-micro-weather SCORE:\t{}".format(self.compute_F1(P_wea_score, R_wea_score)))
-            print("F1-micro-navigate SCORE:\t{}".format(self.compute_F1(P_nav_score, R_nav_score)))
+            print("F1-micro-sche SCORE:\t{}".format(self.compute_F1(P_sche_score, R_sche_score)))
+            print("F1-micro-wea SCORE:\t{}".format(self.compute_F1(P_wea_score, R_wea_score)))
+            print("F1-micro-nav SCORE:\t{}".format(self.compute_F1(P_nav_score, R_nav_score)))
         elif args['dataset'] == 'woz':
             print("BLEU SCORE:\t" + str(bleu_score))
             print("F1-macro SCORE:\t{}".format(F1_pred / float(F1_count)))
@@ -597,22 +506,23 @@ class DFNet(nn.Module):
         return F1
 
     def print_examples(self, batch_idx, data, pred_sent, pred_sent_coarse, gold_sent):
-        kb_len = len(data['context_arr_plain'][batch_idx]) - data['conv_arr_lengths'][batch_idx] - 1
-        print("{}: ID{} id{} ".format(data['domain'][batch_idx], data['ID'][batch_idx], data['id'][batch_idx]))
-        for i in range(kb_len):
-            kb_temp = [w for w in data['context_arr_plain'][batch_idx][i] if w != 'PAD']
-            kb_temp = kb_temp[::-1]
-            if 'poi' not in kb_temp:
-                print(kb_temp)
-        flag_uttr, uttr = '$u', []
-        for word_idx, word_arr in enumerate(data['context_arr_plain'][batch_idx][kb_len:]):
-            if word_arr[1] == flag_uttr:
-                uttr.append(word_arr[0])
-            else:
-                print(flag_uttr, ': ', " ".join(uttr))
-                flag_uttr = word_arr[1]
-                uttr = [word_arr[0]]
-        print('Sketch System Response : ', pred_sent_coarse)
-        print('Final System Response : ', pred_sent)
-        print('Gold System Response : ', gold_sent)
-        print('\n')
+        with open('gen_result.log', 'a+', encoding='utf-8') as f:
+            kb_len = len(data['context_arr_plain'][batch_idx]) - data['conv_arr_lengths'][batch_idx] - 1
+            print("{}: ID{} id{} ".format(data['domain'][batch_idx], data['ID'][batch_idx], data['id'][batch_idx]), file=f)
+            for i in range(kb_len):
+                kb_temp = [w for w in data['context_arr_plain'][batch_idx][i] if w != 'PAD']
+                kb_temp = kb_temp[::-1]
+                if 'poi' not in kb_temp:
+                    print(kb_temp, file=f)
+            flag_uttr, uttr = '$u', []
+            for word_idx, word_arr in enumerate(data['context_arr_plain'][batch_idx][kb_len:]):
+                if word_arr[1] == flag_uttr:
+                    uttr.append(word_arr[0])
+                else:
+                    print(flag_uttr, ': ', " ".join(uttr), file=f)
+                    flag_uttr = word_arr[1]
+                    uttr = [word_arr[0]]
+            print('Sketch System Response : ', pred_sent_coarse, file=f)
+            print('Final System Response : ', pred_sent, file=f)
+            print('Gold System Response : ', gold_sent, file=f)
+            print('\n', file=f)

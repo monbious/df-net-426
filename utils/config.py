@@ -15,8 +15,8 @@ parser.add_argument('-fixed', '--fixed', help='fix seeds', required=False, defau
 parser.add_argument('-random_seed', '--random_seed', help='random_seed', required=False, default=1234)
 parser.add_argument('-em_dim', '--embeddings_dim', help='word embeddings dim', type=int, required=False, default=128)
 parser.add_argument('-hdd', '--hidden', help='Hidden size', required=False, default=128)
-parser.add_argument('-bsz', '--batch', help='Batch_size', type=int, required=False, default=8)
-parser.add_argument('-lr', '--learn', help='Learning Rate', required=False, default=0.0007)
+parser.add_argument('-bsz', '--batch', help='Batch_size', type=int, required=False, default=16)
+parser.add_argument('-lr', '--learn', help='Learning Rate', required=False, default=0.001)
 parser.add_argument('-dr', '--drop', help='Drop Out', required=False, default=0.2)
 parser.add_argument('-um', '--unk_mask', help='mask out input token to UNK', type=int, required=False, default=1)
 parser.add_argument('-gpu', '--gpu', help='use gpu', required=False, default=False)
@@ -25,7 +25,7 @@ parser.add_argument('-l_r', '--layer_r', help='RNN Layer Number', required=False
 parser.add_argument('-lm', '--limit', help='Word Limit', required=False, default=-10000)
 parser.add_argument('-path', '--path', help='path of the file to load', required=False)
 parser.add_argument('-clip', '--clip', help='gradient clipping', required=False, default=10)
-parser.add_argument('-count', '--count', help='count for early stop', required=False, type=int, default=10)
+parser.add_argument('-count', '--count', help='count for early stop', required=False, type=int, default=8)
 parser.add_argument('-tfr', '--teacher_forcing_ratio', help='teacher_forcing_ratio', type=float, required=False,
                     default=0.9)
 
@@ -36,8 +36,6 @@ parser.add_argument('-es', '--earlyStop', help='Early Stop Criteria, BLEU or ENT
 parser.add_argument('-rec', '--record', help='use record function during inference', type=int, required=False,
                     default=1)
 parser.add_argument('-op', '--output', help='output file', required=False, default='output.log')
-parser.add_argument('-nl', '--num_layers', help='transformer num_layers', required=False, default=4)
-parser.add_argument('-nh', '--num_heads', help='transformer num_heads', required=False, default=8)
 
 args = vars(parser.parse_args())
 print(str(args))
