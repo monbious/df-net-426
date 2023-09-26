@@ -91,6 +91,7 @@ class Dataset(data.Dataset):
         # additional plain information
         data_info['context_arr_plain'] = self.data_info['context_arr'][index]
         data_info['response_plain'] = self.data_info['response'][index]
+        data_info['dialog_template_plain'] = self.data_info['conv_u'][index]
         data_info['gold_sketch_response'] = self.data_info['sketch_response'][index]
         data_info['kb_arr_plain'] = self.data_info['kb_arr'][index]
 

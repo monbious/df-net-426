@@ -63,7 +63,7 @@ The script **myTrain.py** acts as a main function to the project, you can run th
 
 ```Shell
 # SMD dataset
-python myTrain.py -gpu=True -ds=kvr -dr=0.2 -bsz=8 -tfr=0.8 -an=SMD -op=SMD.log -lr=0.0005
+python myTrain.py -gpu=false -ds=kvr -dr=0.2 -bsz=8 -tfr=0.8 -an=SMD -op=SMD.log -lr=0.0005 -gs=1 -count=12
 # MultiWOZ 2.1 dataset
 python myTrain.py -gpu=True -ds=woz -dr=0.2 -bsz=8 -tfr=0.9 -an=WOZ -op=WOZ.log -lr=0.0005
 ```
