@@ -305,6 +305,8 @@ class DFNet(nn.Module):
                 pred_sent = st.lstrip().rstrip()
                 pred_sent_coarse = st_c.lstrip().rstrip()
                 gold_sent = data_dev['response_plain'][bi].lstrip().rstrip()
+                dialog_template_plain = data_dev['dialog_template_plain'][bi].lstrip().rstrip()
+                gold_sketch_response = data_dev['gold_sketch_response'][bi].lstrip().rstrip()
 
                 ref.append(gold_sent)
                 hyp.append(pred_sent)
@@ -401,8 +403,6 @@ class DFNet(nn.Module):
                     acc += 1
 
                 if args['genSample']:
-                    dialog_template_plain = data_dev['dialog_template_plain']
-                    gold_sketch_response = data_dev['gold_sketch_response']
                     self.print_examples(bi, data_dev, pred_sent, pred_sent_coarse, gold_sent, dialog_template_plain, gold_sketch_response)
 
         # Set back to training mode
