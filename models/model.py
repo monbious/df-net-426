@@ -305,7 +305,7 @@ class DFNet(nn.Module):
                 pred_sent = st.lstrip().rstrip()
                 pred_sent_coarse = st_c.lstrip().rstrip()
                 gold_sent = data_dev['response_plain'][bi].lstrip().rstrip()
-                dialog_template_plain = " ".join(data_dev['dialog_template_plain'][bi])
+                dialog_template_plain = data_dev['dialog_template_plain']
                 ref.append(gold_sent)
                 hyp.append(pred_sent)
 
