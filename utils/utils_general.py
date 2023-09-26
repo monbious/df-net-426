@@ -63,8 +63,8 @@ class Dataset(data.Dataset):
         ptr_index = torch.Tensor(self.data_info['ptr_index'][index])
         selector_index = torch.Tensor(self.data_info['selector_index'][index])
         ent_selector_index = torch.Tensor(self.data_info['ent_selector_index'][index])
-        conv_arr = self.data_info['conv_arr'][index]
-        conv_arr = self.preprocess(conv_arr, self.src_word2id, trg=False)
+        conv_arr_words = self.data_info['conv_arr'][index]
+        conv_arr = self.preprocess(conv_arr_words, self.src_word2id, trg=False)
         kb_arr = self.data_info['kb_arr'][index]
         kb_arr = self.preprocess(kb_arr, self.src_word2id, trg=False)
         sketch_response = self.data_info['sketch_response'][index]
@@ -92,6 +92,7 @@ class Dataset(data.Dataset):
         data_info['context_arr_plain'] = self.data_info['context_arr'][index]
         data_info['response_plain'] = self.data_info['response'][index]
         data_info['dialog_template_plain'] = " ".join([item[0] for item in conv_u_words])
+        data_info['dialog_plain'] = " ".join([item[0] for item in conv_arr_words])
         data_info['gold_sketch_response'] = self.data_info['sketch_response'][index]
         data_info['kb_arr_plain'] = self.data_info['kb_arr'][index]
 
