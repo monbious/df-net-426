@@ -305,7 +305,7 @@ class DFNet(nn.Module):
                 pred_sent = st.lstrip().rstrip()
                 pred_sent_coarse = st_c.lstrip().rstrip()
                 gold_sent = data_dev['response_plain'][bi].lstrip().rstrip()
-                dialog_template_plain = data_dev['dialog_template_plain']
+
                 ref.append(gold_sent)
                 hyp.append(pred_sent)
 
@@ -401,7 +401,9 @@ class DFNet(nn.Module):
                     acc += 1
 
                 if args['genSample']:
-                    self.print_examples(bi, data_dev, pred_sent, pred_sent_coarse, gold_sent, dialog_template_plain)
+                    dialog_template_plain = data_dev['dialog_template_plain']
+                    gold_sketch_response = data_dev['gold_sketch_response']
+                    self.print_examples(bi, data_dev, pred_sent, pred_sent_coarse, gold_sent, dialog_template_plain, gold_sketch_response)
 
         # Set back to training mode
         self.encoder.train(True)
@@ -533,7 +535,7 @@ class DFNet(nn.Module):
         F1 = 2 * precision * recall / float(precision + recall) if (precision + recall) != 0 else 0
         return F1
 
-    def print_examples(self, batch_idx, data, pred_sent, pred_sent_coarse, gold_sent, dialog_template_plain):
+    def print_examples(self, batch_idx, data, pred_sent, pred_sent_coarse, gold_sent, dialog_template_plain, gold_sketch_response):
         with open('gen_result.log', 'a', encoding='utf-8') as f:
             kb_len = len(data['context_arr_plain'][batch_idx]) - data['conv_arr_lengths'][batch_idx] - 1
             print("{}: ID{} id{} ".format(data['domain'][batch_idx], data['ID'][batch_idx], data['id'][batch_idx]), file=f)
@@ -551,8 +553,9 @@ class DFNet(nn.Module):
                     flag_uttr = word_arr[1]
                     uttr = [word_arr[0]]
 
-            print('dialog_template_plain : ', dialog_template_plain, file=f)
+            print('Dialog Template Plain : ', dialog_template_plain, file=f)
             print('Sketch System Response : ', pred_sent_coarse, file=f)
             print('Final System Response : ', pred_sent, file=f)
+            print('Gold Sketch Response : ', gold_sketch_response, file=f)
             print('Gold System Response : ', gold_sent, file=f)
             print('\n', file=f)
