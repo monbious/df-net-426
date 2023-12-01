@@ -557,8 +557,10 @@ class DFNet(nn.Module):
 
             print('Dialog Plain : ', dialog_plain, file=f)
             print('Dialog Template Plain : ', dialog_template_plain, file=f)
+            print(file=f)
             print('Sketch System Response : ', pred_sent_coarse, file=f)
             print('Final System Response : ', pred_sent, file=f)
+            print(file=f)
             print('Gold Sketch Response : ', gold_sketch_response, file=f)
             print('Gold System Response : ', gold_sent, file=f)
-            print('\n', file=f)
+            print(file=f)
