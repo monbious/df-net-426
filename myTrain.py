@@ -40,7 +40,7 @@ if args['epoch'] > 0:
     # Training
     for epoch in range(args['epoch']):
         print("Epoch:{}".format(epoch))
-        pbar = tqdm(enumerate(train), total=len(train))
+        pbar = tqdm(enumerate(train), total=len(train), ncols=100)
         for i, data in pbar:
             model.train_batch(data, int(args['clip']), reset=(i == 0))
             pbar.set_description(model.print_loss())
