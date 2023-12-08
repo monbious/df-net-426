@@ -181,7 +181,7 @@ class DFNet(nn.Module):
             data['conv_ent_mask'],
             data['conv_word_lengths'])
 
-        global_pointer, kb_readout, ent_pointer, kb_emb, kb_output = self.extKnow.load_memory(
+        global_pointer, kb_readout, kb_output, ent_pointer, ent_readout, kb_emb = self.extKnow.load_memory(
             story,
             data['kb_arr_lengths'],
             data['conv_arr_lengths'],

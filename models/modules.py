@@ -474,8 +474,8 @@ class ExternalKnowledge(nn.Module):
         # print(kb_emb.shape)
         # kb_output = self.relu(self.fused_kb_output(torch.cat(kb_outputs, dim=-1)))
 
-        ent_pointer, kb_emb = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, hidden_fine, dh_outputs_fine, ctx_word_lens)
-        return self.sigmoid(prob_logit), u[-1], ent_pointer, kb_emb, kb_outputs[-1]
+        ent_pointer, kb_emb, ent_readout = self.load_ent_memory(story, kb_len, conv_len, hidden, dh_outputs, domains, hidden_fine, dh_outputs_fine, ctx_word_lens)
+        return self.sigmoid(prob_logit), u[-1], kb_outputs[-1], ent_pointer, ent_readout, kb_emb
 
     def load_ent_memory(self, story, kb_len, conv_len, hidden, dh_outputs, domains, hidden_fine, dh_outputs_fine, ctx_word_lens):
         u_ent = [hidden_fine.squeeze(0)]
@@ -507,7 +507,7 @@ class ExternalKnowledge(nn.Module):
         self.m_story_ent.append(embed_C)
 
         # kb_emb = self.relu(self.fused_kb(torch.cat(kb_embs, dim=-1)))
-        return self.sigmoid(prob_logit), kb_embs[-1]
+        return self.sigmoid(prob_logit), kb_embs[-1], u_ent[-1]
 
     def forward(self, query_vector, global_pointer):
         u = [query_vector]
