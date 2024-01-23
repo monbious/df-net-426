@@ -19,7 +19,7 @@ def read_langs(file_name, max_line=None):
 
     with open('data/CamRest/camrest_entities.json') as f:
         global_entity = json.load(f)
-        global_entity_keys = list(global_entity[0].keys())
+        global_entity_keys = list(global_entity["poi"][0].keys())
 
     with open(file_name) as fin:
         cnt_lin, sample_counter = 1, 1
