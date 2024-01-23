@@ -1,4 +1,5 @@
-[
+{
+    "poi": [
     {
         "address": "Regent Street City Centre",
         "area": "centre",
@@ -1316,3 +1317,4 @@
         "name": "bangkok city"
     }
 ]
+}

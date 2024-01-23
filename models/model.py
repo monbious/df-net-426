@@ -250,6 +250,12 @@ class DFNet(nn.Module):
             TP_restaurant, FP_restaurant, FN_restaurant = 0, 0, 0
             TP_attraction, FP_attraction, FN_attraction = 0, 0, 0
             TP_hotel, FP_hotel, FN_hotel = 0, 0, 0
+        elif args['dataset'] == 'car':
+            F1_pred, F1_restaurant_pred = 0, 0
+            F1_count, F1_restaurant_count = 0, 0
+            TP_all, FP_all, FN_all = 0, 0, 0
+
+            TP_restaurant, FP_restaurant, FN_restaurant = 0, 0, 0
 
         pbar = tqdm(enumerate(dev), total=len(dev))
 
@@ -257,6 +263,8 @@ class DFNet(nn.Module):
             entity_path = 'data/KVR/kvret_entities.json'
         elif args['dataset'] == 'woz':
             entity_path = 'data/MULTIWOZ2.1/global_entities.json'
+        elif args['dataset'] == 'car':
+            entity_path = 'data/CamRest/camrest_entities.json'
         else:
             print('dataset args error')
             exit(1)
@@ -399,6 +407,29 @@ class DFNet(nn.Module):
                     FP_hotel += single_fp
                     FN_hotel += single_fn
 
+                elif args['dataset'] == 'car':
+                    # coimpute F1 SCORE
+                    single_tp, single_fp, single_fn, single_f1, count = self.compute_prf(data_dev['ent_index'][bi],
+                                                                                         pred_sent.split(),
+                                                                                         global_entity_list,
+                                                                                         data_dev['kb_arr_plain'][bi])
+                    F1_pred += single_f1
+                    F1_count += count
+                    TP_all += single_tp
+                    FP_all += single_fp
+                    FN_all += single_fn
+
+                    single_tp, single_fp, single_fn, single_f1, count = self.compute_prf(
+                        data_dev['ent_idx_restaurant'][bi],
+                        pred_sent.split(),
+                        global_entity_list,
+                        data_dev['kb_arr_plain'][bi])
+                    F1_restaurant_pred += single_f1
+                    F1_restaurant_count += count
+                    TP_restaurant += single_tp
+                    FP_restaurant += single_fp
+                    FN_restaurant += single_fn
+
                 # compute Per-response Accuracy Score
                 total += 1
                 if (gold_sent == pred_sent):
@@ -463,6 +494,20 @@ class DFNet(nn.Module):
             print("F1-micro-restaurant SCORE:\t{}".format(self.compute_F1(P_restaurant_score, R_restaurant_score)))
             print("F1-micro-attraction SCORE:\t{}".format(self.compute_F1(P_attraction_score, R_attraction_score)))
             print("F1-micro-hotel SCORE:\t{}".format(self.compute_F1(P_hotel_score, R_hotel_score)))
+        elif args['dataset'] == 'car':
+            print("BLEU SCORE:\t" + str(bleu_score))
+            print("F1-macro SCORE:\t{}".format(F1_pred / float(F1_count)))
+            print("F1-macro-restaurant SCORE:\t{}".format(F1_restaurant_pred / float(F1_restaurant_count)))
+
+            P_score = TP_all / float(TP_all + FP_all) if (TP_all + FP_all) != 0 else 0
+            R_score = TP_all / float(TP_all + FN_all) if (TP_all + FN_all) != 0 else 0
+
+            P_restaurant_score = TP_restaurant / float(TP_restaurant + FP_restaurant) if (TP_restaurant + FP_restaurant) != 0 else 0
+            R_restaurant_score = TP_restaurant / float(TP_restaurant + FN_restaurant) if (TP_restaurant + FN_restaurant) != 0 else 0
+
+            F1_score = self.compute_F1(P_score, R_score)
+            print("F1-micro SCORE:\t{}".format(F1_score))
+            print("F1-micro-restaurant SCORE:\t{}".format(self.compute_F1(P_restaurant_score, R_restaurant_score)))
 
         if output:
             print('Test Finish!')
@@ -495,6 +540,16 @@ class DFNet(nn.Module):
                         self.compute_F1(P_attraction_score, R_attraction_score)),
                         file=f)
                     print("F1-micro-hotel SCORE:\t{}".format(self.compute_F1(P_hotel_score, R_hotel_score)), file=f)
+                elif args['dataset'] == 'car':
+                    print("ACC SCORE:\t" + str(acc_score), file=f)
+                    print("BLEU SCORE:\t" + str(bleu_score), file=f)
+                    print("F1-macro SCORE:\t{}".format(F1_pred / float(F1_count)), file=f)
+                    print("F1-micro SCORE:\t{}".format(self.compute_F1(P_score, R_score)), file=f)
+                    print("F1-macro-restaurant SCORE:\t{}".format(F1_restaurant_pred / float(F1_restaurant_count)),
+                          file=f)
+                    print("F1-micro-restaurant SCORE:\t{}".format(
+                        self.compute_F1(P_restaurant_score, R_restaurant_score)),
+                        file=f)
 
         if (early_stop == 'BLEU'):
             if (bleu_score >= matric_best):
