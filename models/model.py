@@ -73,6 +73,8 @@ class DFNet(nn.Module):
             name_data = "KVR/"
         elif args['dataset'] == 'woz':
             name_data = "WOZ/"
+        elif args['dataset'] == 'car':
+            name_data = "CAR/"
         layer_info = str(self.n_layers)
         directory = 'save/DF-Net-' + args["addName"] + name_data + 'HDD' + str(
             self.hidden_size) + 'BSZ' + str(args['batch']) + 'DR' + str(self.dropout) + 'L' + layer_info + 'lr' + str(
