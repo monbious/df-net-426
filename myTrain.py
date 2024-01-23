@@ -20,6 +20,9 @@ if args['dataset'] == 'kvr':
 elif args['dataset'] == 'woz':
     from utils.utils_Ent_woz import *
     domains = {'restaurant': 0, 'attraction': 1, 'hotel': 2}
+elif args['dataset'] == 'camrest':
+    from utils.utils_Ent_camrest import *
+    domains = {'restaurant': 0}
 else:
     print("[ERROR] You need to provide the correct --dataset information")
 

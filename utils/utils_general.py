@@ -16,6 +16,8 @@ if args['dataset'] == 'kvr':
     domains = {'navigate': 0, 'weather': 1, 'schedule': 2}
 elif args['dataset'] == 'woz':
     domains = {'restaurant': 0, 'attraction': 1, 'hotel': 2}
+elif args['dataset'] == 'camrest':
+    domains = {'restaurant': 0}
 
 
 class Lang:
