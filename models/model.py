@@ -128,7 +128,7 @@ class DFNet(nn.Module):
         #     data['conv_r'].contiguous(),
         #     data['response_lengths']
         # )
-        loss = loss_g + loss_v + loss_l + loss_e
+        loss = loss_g + 3*loss_v + loss_l + loss_e
 
         # golden_labels = torch.zeros_like(label_e).scatter_(1, data['label_arr'], 1)
         # loss += self.criterion_label(label_e, golden_labels)

@@ -285,20 +285,20 @@ class ContextEncoder(nn.Module):
 
         self.MLP_H = nn.Sequential(
             nn.Linear(4 * self.hidden_size, 2 * self.hidden_size),
-            # nn.LeakyReLU(0.1),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
+            # nn.ReLU(),
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
         )
         self.MLP_sket = nn.Sequential(
             nn.Linear(4 * self.hidden_size, 2 * self.hidden_size),
-            # nn.LeakyReLU(0.1),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
+            # nn.ReLU(),
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
         )
         self.W_hid = nn.Sequential(
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
-            # nn.LeakyReLU(0.1),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
+            # nn.ReLU(),
         )
 
         self.W = nn.Linear(hidden_size, 1)
@@ -551,11 +551,12 @@ class LocalMemoryDecoder(nn.Module):
             self.add_module("sketch_rnn_local_{}".format(index), local)
         self.sketch_rnn_local = AttrProxy(self, "sketch_rnn_local_")
         self.mix_attention = MLPSelfAttention(len(domains) * hidden_dim, len(domains), dropout)
-        self.relu = nn.ReLU()
+        self.relu = nn.LeakyReLU(0.1),
         self.projector = nn.Sequential(
             # nn.Linear(4 * hidden_dim, 2 * hidden_dim),
             # nn.LeakyReLU(0.1),
             nn.Linear(2 * hidden_dim, hidden_dim),
+            nn.LeakyReLU(0.1),
         )
         self.MLP = nn.Sequential(
             nn.Linear(2 * hidden_dim, 1 * hidden_dim),
@@ -637,7 +638,7 @@ class LocalMemoryDecoder(nn.Module):
         memory_mask_for_step = _cuda(torch.ones(story_size[0], story_size[1]))
         decoded_fine, decoded_coarse = [], []
 
-        hidden = self.relu(self.projector(encode_hidden)).unsqueeze(0)
+        hidden = self.projector(encode_hidden).unsqueeze(0)
         # hidden = encode_hidden.unsqueeze(0)
 
         hidden_locals = []
