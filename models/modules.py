@@ -285,17 +285,20 @@ class ContextEncoder(nn.Module):
 
         self.MLP_H = nn.Sequential(
             nn.Linear(4 * self.hidden_size, 2 * self.hidden_size),
-            nn.LeakyReLU(0.1),
+            # nn.LeakyReLU(0.1),
+            nn.ReLU(),
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
         )
         self.MLP_sket = nn.Sequential(
             nn.Linear(4 * self.hidden_size, 2 * self.hidden_size),
-            nn.LeakyReLU(0.1),
+            # nn.LeakyReLU(0.1),
+            nn.ReLU(),
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
         )
         self.W_hid = nn.Sequential(
             nn.Linear(2 * self.hidden_size, 1 * self.hidden_size),
-            nn.LeakyReLU(0.1),
+            # nn.LeakyReLU(0.1),
+            nn.ReLU(),
         )
 
         self.W = nn.Linear(hidden_size, 1)
