@@ -280,7 +280,7 @@ class ContextEncoder(nn.Module):
                 unk_words = word.split('_')
                 unk_emb = np.array([word2vec_model[w]
                                     if w in word2vec_model else
-                                    np.random.normal(low=-0.1, high=0.1, size=args['embeddings_dim'])
+                                    np.random.normal(-0.1, 0.1, size=args['embeddings_dim'])
                                    .astype(np.float32) for w in unk_words])
                 embedding_matrix[i] = np.mean(unk_emb, axis=0)
         embedding_matrix = torch.from_numpy(embedding_matrix)
