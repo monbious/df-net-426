@@ -41,7 +41,7 @@ class DFNet(nn.Module):
                 self.extKnow = torch.load(str(path) + '/enc_kb.th', lambda storage, loc: storage)
                 self.decoder = torch.load(str(path) + '/dec.th', lambda storage, loc: storage)
         else:
-            self.encoder = ContextEncoder(lang.n_words, hidden_size, dropout, domains)
+            self.encoder = ContextEncoder(lang.n_words, hidden_size, dropout, domains, lang)
             self.extKnow = ExternalKnowledge(lang.n_words, hidden_size, n_layers, dropout)
             self.decoder = LocalMemoryDecoder(self.encoder.embedding, lang, hidden_size, self.decoder_hop,
                                               dropout, domains=domains)
@@ -128,7 +128,7 @@ class DFNet(nn.Module):
         #     data['conv_r'].contiguous(),
         #     data['response_lengths']
         # )
-        loss = loss_g + 3*loss_v + loss_l + loss_e
+        loss = loss_g + loss_v + loss_l + loss_e
 
         # golden_labels = torch.zeros_like(label_e).scatter_(1, data['label_arr'], 1)
         # loss += self.criterion_label(label_e, golden_labels)

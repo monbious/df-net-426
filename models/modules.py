@@ -1,3 +1,4 @@
+import numpy
 import numpy as np
 import torch
 import torch.nn as nn
@@ -6,6 +7,8 @@ from utils.config import *
 from utils.utils_general import _cuda
 import math
 import copy
+from gensim.models import KeyedVectors
+import gensim.downloader as api
 
 
 class GradientReversalFunction(torch.autograd.Function):
@@ -255,7 +258,7 @@ class TransformerModel(nn.Module):
 
 
 class ContextEncoder(nn.Module):
-    def __init__(self, input_size, hidden_size, dropout, domains, n_layers=args['layer_r']):
+    def __init__(self, input_size, hidden_size, dropout, domains, lang, n_layers=args['layer_r']):
         super(ContextEncoder, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -265,7 +268,22 @@ class ContextEncoder(nn.Module):
         self.mix_attention_sket = MLPSelfAttention(len(domains) * 2 * self.hidden_size, len(domains), dropout)
         self.dropout = dropout
         self.dropout_layer = nn.Dropout(dropout)
-        self.embedding = nn.Embedding(input_size, args['embeddings_dim'], padding_idx=PAD_token)
+
+        # 下载默认的Word2Vec模型
+        word2vec_model = api.load(f'word2vec-google-news-{args["embeddings_dim"]}')
+        embedding_matrix = np.zeros((input_size, args['embeddings_dim']), dtype=np.float32)
+        random_embedding = np.random.uniform(low=0, high=1, size=(input_size, args['embeddings_dim'])).astype(np.float32)
+        for i, word in lang.index2word.items():
+            try:
+                embedding_matrix[i] = word2vec_model[word]
+            except Exception as e:
+                print(f'({i}, {lang.index2word[i]})', e)
+                embedding_matrix[i] = random_embedding[i]
+        embedding_matrix = torch.from_numpy(embedding_matrix)
+
+        # self.embedding.load_state_dict({'weight': embedding_matrix})
+        self.embedding = nn.Embedding.from_pretrained(embedding_matrix, padding_idx=PAD_token)
+
         self.odim = args['embeddings_dim']
         self.global_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
         self.sketch_gru = RNN_Residual(self.odim, hidden_size, n_layers, dropout=dropout)
@@ -305,7 +323,7 @@ class ContextEncoder(nn.Module):
         self.global_classifier = nn.Sequential(
             GradientReversal(),
             CNNClassifier(2 * hidden_size, hidden_size, [2, 3], len(domains), dropout))
-        self.tfModel = TransformerModel(self.input_size, hidden_size, 4, 8, dropout, self.embedding)
+        # self.tfModel = TransformerModel(self.input_size, hidden_size, 4, 8, dropout, self.embedding)
 
     def get_state(self, bsz):
         """Get cell states and hidden states."""
