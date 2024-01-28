@@ -42,7 +42,7 @@ class DFNet(nn.Module):
                 self.decoder = torch.load(str(path) + '/dec.th', lambda storage, loc: storage)
         else:
             self.encoder = ContextEncoder(lang.n_words, hidden_size, dropout, domains, lang)
-            self.extKnow = ExternalKnowledge(lang.n_words, hidden_size, n_layers, dropout)
+            self.extKnow = ExternalKnowledge(lang.n_words, hidden_size, n_layers, dropout, lang)
             self.decoder = LocalMemoryDecoder(self.encoder.embedding, lang, hidden_size, self.decoder_hop,
                                               dropout, domains=domains)
 

@@ -269,7 +269,6 @@ class ContextEncoder(nn.Module):
         self.dropout = dropout
         self.dropout_layer = nn.Dropout(dropout)
 
-        # 下载默认的Word2Vec模型
         # word2vec_model = api.load(f'word2vec-google-news-{args["embeddings_dim"]}')
         word2vec_model = api.load(f'glove-wiki-gigaword-{args["embeddings_dim"]}')
         embedding_matrix = np.zeros((input_size, args['embeddings_dim']), dtype=np.float32)
@@ -283,8 +282,6 @@ class ContextEncoder(nn.Module):
                 unk_emb = np.array([word2vec_model[w] if w in word2vec_model else np.random.uniform(low=-1, high=1, size=args['embeddings_dim']).astype(np.float32) for w in unk_words])
                 embedding_matrix[i] = np.mean(unk_emb, axis=0)
         embedding_matrix = torch.from_numpy(embedding_matrix)
-
-        # self.embedding.load_state_dict({'weight': embedding_matrix})
         self.embedding = nn.Embedding.from_pretrained(embedding_matrix, padding_idx=PAD_token)
 
         self.odim = args['embeddings_dim']
@@ -401,15 +398,30 @@ class ContextEncoder(nn.Module):
 
 
 class ExternalKnowledge(nn.Module):
-    def __init__(self, vocab, embedding_dim, hop, dropout):
+    def __init__(self, vocab, embedding_dim, hop, dropout, lang):
         super(ExternalKnowledge, self).__init__()
         self.max_hops = hop
         self.embedding_dim = embedding_dim
         self.dropout = dropout
         self.dropout_layer = nn.Dropout(dropout)
+        word2vec_model = api.load(f'glove-wiki-gigaword-{args["embeddings_dim"]}')
         for hop in range(self.max_hops + 1):
-            C = nn.Embedding(vocab, embedding_dim, padding_idx=PAD_token)
-            C.weight.data.normal_(0, 0.1)
+            embedding_matrix = np.zeros((vocab, args['embeddings_dim']), dtype=np.float32)
+            for i, word in lang.index2word.items():
+                try:
+                    embedding_matrix[i] = word2vec_model[word]
+                except Exception as e:
+                    # print(f'({i}, {lang.index2word[i]})', e)
+                    unk_words = word.split('_')
+                    unk_emb = np.array([word2vec_model[w]
+                                        if w in word2vec_model else
+                                        np.random.normal(0, 0.1, size=args['embeddings_dim'])
+                                       .astype(np.float32) for w in unk_words])
+                    embedding_matrix[i] = np.mean(unk_emb, axis=0)
+            embedding_matrix = torch.from_numpy(embedding_matrix)
+            C = nn.Embedding.from_pretrained(embedding_matrix, padding_idx=PAD_token)
+            # C = nn.Embedding(vocab, embedding_dim, padding_idx=PAD_token)
+            # C.weight.data.normal_(0, 0.1)
             self.add_module("C_{}".format(hop), C)
         self.C = AttrProxy(self, "C_")
 
