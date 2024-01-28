@@ -423,7 +423,7 @@ class ExternalKnowledge(nn.Module):
             embedding_matrix = torch.from_numpy(embedding_matrix)
             C = nn.Embedding.from_pretrained(embedding_matrix, padding_idx=PAD_token)
             # C = nn.Embedding(vocab, embedding_dim, padding_idx=PAD_token)
-            C.weight.data.normal_(0, 0.1)
+            # C.weight.data.normal_(0, 0.1)
             self.add_module("C_{}".format(hop), C)
         self.C = AttrProxy(self, "C_")
 
