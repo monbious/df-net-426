@@ -270,7 +270,8 @@ class ContextEncoder(nn.Module):
         self.dropout_layer = nn.Dropout(dropout)
 
         # 下载默认的Word2Vec模型
-        word2vec_model = api.load(f'word2vec-google-news-{args["embeddings_dim"]}')
+        # word2vec_model = api.load(f'word2vec-google-news-{args["embeddings_dim"]}')
+        word2vec_model = api.load(f'glove-wiki-gigaword-{args["embeddings_dim"]}')
         embedding_matrix = np.zeros((input_size, args['embeddings_dim']), dtype=np.float32)
         random_embedding = np.random.uniform(low=0, high=1, size=(input_size, args['embeddings_dim'])).astype(np.float32)
         for i, word in lang.index2word.items():
