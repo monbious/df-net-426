@@ -384,6 +384,12 @@ class ExternalKnowledge(nn.Module):
         self.dropout = dropout
         self.dropout_layer = nn.Dropout(dropout)
         for hop in range(self.max_hops + 1):
+            CE = nn.Embedding(vocab, embedding_dim, padding_idx=PAD_token)
+            CE.weight.data.normal_(0, 0.1)
+            self.add_module("CE_{}".format(hop), CE)
+        self.CE = AttrProxy(self, "CE_")
+
+        for hop in range(self.max_hops + 1):
             C = nn.Embedding(vocab, embedding_dim, padding_idx=PAD_token)
             C.weight.data.normal_(0, 0.1)
             self.add_module("C_{}".format(hop), C)
@@ -428,6 +434,14 @@ class ExternalKnowledge(nn.Module):
 
     def get_ck(self, hop, story, story_size, ctx_word_lens):
         embed = self.C[hop](story.contiguous().view(story_size[0], -1))
+        embed = embed.view(story_size + (embed.size(-1),))
+        ctx_word_lens = ctx_word_lens.unsqueeze(-1)
+        embed = embed.masked_fill(ctx_word_lens == 2, 0)
+        embed = torch.sum(embed, 2)
+        return embed
+
+    def get_ck_ent(self, hop, story, story_size, ctx_word_lens):
+        embed = self.CE[hop](story.contiguous().view(story_size[0], -1))
         embed = embed.view(story_size + (embed.size(-1),))
         ctx_word_lens = ctx_word_lens.unsqueeze(-1)
         embed = embed.masked_fill(ctx_word_lens == 2, 0)
@@ -483,7 +497,7 @@ class ExternalKnowledge(nn.Module):
         kb_embs = []
         self.m_story_ent = []
         for hop in range(self.max_hops):
-            embed_A = self.get_ck(hop, story, story_size, ctx_word_lens)
+            embed_A = self.get_ck_ent(hop, story, story_size, ctx_word_lens)
             embed_A = self.add_lm_embedding(embed_A, kb_len, conv_len, dh_outputs_fine)
             embed_A = self.dropout_layer(embed_A)
 
@@ -493,7 +507,7 @@ class ExternalKnowledge(nn.Module):
             prob_logit = torch.sum(embed_A * u_temp, 2)
             prob_ = self.softmax(prob_logit)
 
-            embed_C = self.get_ck(hop + 1, story, story_size, ctx_word_lens)
+            embed_C = self.get_ck_ent(hop + 1, story, story_size, ctx_word_lens)
             embed_C = self.add_lm_embedding(embed_C, kb_len, conv_len, dh_outputs_fine)
 
             prob = prob_.unsqueeze(2).expand_as(embed_C)
@@ -553,6 +567,7 @@ class LocalMemoryDecoder(nn.Module):
             # nn.Linear(4 * hidden_dim, 2 * hidden_dim),
             # nn.LeakyReLU(0.1),
             nn.Linear(2 * hidden_dim, hidden_dim),
+            nn.LeakyReLU(0.1),
         )
         self.MLP = nn.Sequential(
             nn.Linear(2 * hidden_dim, 1 * hidden_dim),
@@ -634,7 +649,7 @@ class LocalMemoryDecoder(nn.Module):
         memory_mask_for_step = _cuda(torch.ones(story_size[0], story_size[1]))
         decoded_fine, decoded_coarse = [], []
 
-        hidden = self.relu(self.projector(encode_hidden)).unsqueeze(0)
+        hidden = self.projector(encode_hidden).unsqueeze(0)
         # hidden = encode_hidden.unsqueeze(0)
 
         hidden_locals = []
